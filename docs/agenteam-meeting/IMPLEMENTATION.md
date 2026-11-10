@@ -13,7 +13,7 @@
 | M3 | 智能分析领域层（分类/证据/去重/负责人/上游/评估集） | 完成 | 见 M3 记录 |
 | M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 完成 | 8da0558 |
 | M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 完成 | 见 M4 记录 |
-| M5 | 确认闭环（卡片/回调） | 未开始 | — |
+| M5 | 确认闭环（卡片/回调） | 完成 | d9cfc25 |
 | M6 | 持续督办（Schedule action） | 未开始 | — |
 | M7 | 验收发布 | 未开始 | — |
 
@@ -104,6 +104,34 @@
 - 剩余：回写字段（sync_time 等）的类型转换与飞书真实租户字段类型需 M7 POC 校准；
   插件桥接到 `MeetingSyncCommandService.publish` 的宿主服务桥接契约留待 M5/M7；
   真实飞书端到端投递（A08/A13/A19）无凭据，未以 mock 冒充真实验收。
+
+## M5 记录
+
+- 完成：任务负责人的确认闭环（发卡 → 可信回调 → 确认字段写回飞书）。
+  - 迁移 `V0.6.0.3`：`meeting_confirmation` 版本与身份技术索引
+    （`UNIQUE(enterprise_id, binding_id, business_key)`，外键链到企业/绑定/Run，状态 CHECK），
+    确认状态仍以飞书为唯一事实来源，本表只做版本与身份校验、卡片投递与回调去重快照。
+  - `MeetingConfirmationCard`：schema 2.0 卡片，三动作（确认/需调整/拒绝），回调 `behaviors.value`
+    携带稳定 `task_key`、`task_version` 与 `binding_id`，markdown 特殊字符转义防注入。
+  - `MeetingConfirmationCardSender`：面向负责人 `open_id` 投递（`receive_id_type=open_id`），
+    与群聊卡片 `chat_id` 路径分离；沿用宿主令牌缓存与脱敏网络层，失败不输出凭证或响应正文。
+  - `MeetingConfirmationCallbackService`：挂在 `ChatCardInteractionService`，仅识别 `meeting_confirm`
+    动作；校验机器人状态/凭据修订/绑定归属，再经 `ChatIdentityService` 解析操作者身份。
+  - `MeetingConfirmationService.answer`：企业锁 + 事件去重（`last_event_id`）+ 状态/版本/卡片消息编号/
+    负责人身份四重校验，原子回答后经独立命令服务把确认字段写入投递箱。
+  - `MeetingConfirmationCommandService`：仅允许人工确认字段（`confirm_status`/`confirm_comment`/
+    `confirm_user`/`confirm_time`），映射为飞书字段后入版本化投递箱，普通 AI 提议字段不可冒充确认。
+  - `MeetingConfirmationStore`/`MeetingConfirmationMapper`：`beginRound`（重新确认重置版本/负责人/状态）、
+    `recordCard`（回填平台消息编号）、`answer`（状态+版本+事件去重原子更新）。
+- 验证：
+  - 纯单元：`MeetingConfirmationCardTest`（4）、`MeetingConfirmationStateTest`（3）、
+    `MeetingConfirmationServiceTest`（5：非负责人拒绝 A05、版本/卡片消息不匹配拒绝 A10、事件去重幂等、确认字段映射）。
+  - Docker（mysql:8.4.11）：`MeetingConfirmationSchemaTest`（3：建表/唯一键/CHECK/外键、回答版本与去重栅栏、
+    beginRound 重置与 recordCard 回填）、`MeetingConfirmationCommandServiceTest`（2：非确认/非人工字段拒绝、确认字段映射入队）。
+  - `mvn -o compile` → BUILD SUCCESS；M5 合计 17 项测试全部通过。
+- 剩余：同步完成后自动发卡的宿主→插件负责人解析桥接、重新确认触发新 Run
+  （`RunSubmissionService.meetingRevision` + `MeetingEventAccessService.requireOwner`）留待 M6 补充；
+  真实飞书端到端发卡与回调（A05/A10 现场链路）无凭据，未以 mock 冒充真实验收，留待 M7。
 
 ## 恢复入口
 
