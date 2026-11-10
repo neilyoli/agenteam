@@ -2,6 +2,7 @@ package com.stonewu.agenteam.service.chat;
 
 import com.stonewu.agenteam.configuration.chat.ChatConfiguration;
 import com.stonewu.agenteam.service.integration.IntegrationSecretService;
+import com.stonewu.agenteam.service.meeting.MeetingEventIngressService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class ChatConnectionManager {
     private final ChatConnectionRegistry registry;
     private final ObjectProvider<ChatIngressService> ingress;
     private final ObjectProvider<ChatCardInteractionService> cards;
+    private final ObjectProvider<MeetingEventIngressService> meeting;
     private final IntegrationSecretService secrets;
     private final ChatConfiguration configuration;
     private final Clock clock;
@@ -51,12 +53,14 @@ public class ChatConnectionManager {
 
     public ChatConnectionManager(List<ChatConnectionProvider> providers, ChatConnectionTransactions transactions,
             ChatConnectionRegistry registry, ObjectProvider<ChatIngressService> ingress, IntegrationSecretService secrets,
-            ChatConfiguration configuration, Clock clock, ObjectProvider<ChatCardInteractionService> cards) {
+            ChatConfiguration configuration, Clock clock, ObjectProvider<ChatCardInteractionService> cards,
+            ObjectProvider<MeetingEventIngressService> meeting) {
         this.providers = providers.stream().collect(Collectors.toUnmodifiableMap(ChatConnectionProvider::providerCode, value -> value));
         this.transactions = transactions;
         this.registry = registry;
         this.ingress = ingress;
         this.cards = cards;
+        this.meeting = meeting;
         this.secrets = secrets;
         this.configuration = configuration;
         this.clock = clock;
@@ -132,6 +136,9 @@ public class ChatConnectionManager {
                     if (ChatCardInteractionService.isCard(event)) {
                         return cards.getObject().accept(lease.enterprise(), lease.botId(), lease.version(),
                             lease.application().credentialRevision(), lease.configurationRevision(), event);
+                    }
+                    if (meeting.getObject().accept(lease.enterprise(), lease.application(), event)) {
+                        return null;
                     }
                     ingress.getObject().acceptVerified(lease.enterprise(), lease.botId(), lease.version(),
                         lease.application().credentialRevision(), lease.configurationRevision(), "websocket", event);

@@ -216,6 +216,34 @@ public class RunSubmissionService {
                 maxRetries + 1));
     }
 
+    /**
+     * 每次会议事件建立独立会话并固定事件标识；次数不足时不产生会话、消息或后台任务。
+     */
+    @Transactional
+    public Optional<RunAccepted> meetingEvent(AuthContext actor, ExecutionConfigurationService.Selection selected,
+                                              String text, String meetingEventId, String eventType, String meetingId,
+                                              String minuteToken, int maxRetries) {
+        authorization.lockAndRequire(actor, "agent.run");
+        var input = configuration.input(new MessageInput(text, List.of(), List.of(), List.of(), List.of()));
+        var prepared = prepare(actor, null, selected, input, null);
+        prepared.fixed().put("sourceType", "meeting").put("meetingEventId", meetingEventId)
+            .put("meetingEventType", eventType);
+        if (meetingId != null) {
+            prepared.fixed().put("meetingId", meetingId);
+        }
+        if (minuteToken != null) {
+            prepared.fixed().put("minuteToken", minuteToken);
+        }
+        if (!quotas.tryReserve(actor, prepared.run())) {
+            return Optional.empty();
+        }
+        String id = UUID.randomUUID().toString();
+        conversations.create(id, actor.enterpriseId(), actor.userId(), selected.agentId(), selected.versionId(),
+            selected.hireId(), title(actor, text), "normal", clock.instant());
+        var conversation = conversations.find(actor.enterpriseId(), actor.userId(), id, true).orElseThrow();
+        return Optional.of(persist(actor, conversation, selected, input, prepared, "meeting_event", maxRetries + 1));
+    }
+
     /** 岗位执行复用普通执行、配额和后台工作，关联与 Run 在同一事务内提交。 */
     @Transactional
     public RunAccepted collaboration(AuthContext actor, CollaborationWorkLease lease, String contextId, int round) {
