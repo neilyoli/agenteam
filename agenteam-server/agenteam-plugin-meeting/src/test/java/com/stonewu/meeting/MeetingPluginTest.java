@@ -20,7 +20,7 @@ class MeetingPluginTest {
     void exposesOnlyReadOnlyMeetingTools() {
         var tools = plugin.tools();
         assertEquals(Set.of("meeting_search", "meeting_get", "meeting_artifact_status", "minutes_get",
-                "transcript_get", "meeting_people_resolve", "task_validate"),
+                "transcript_get", "meeting_people_resolve", "task_validate", "task_consolidate"),
             tools.stream().map(t -> t.name()).collect(Collectors.toSet()));
         for (var tool : tools) {
             assertEquals("read", tool.operationClass());
@@ -95,6 +95,25 @@ class MeetingPluginTest {
         var result = invoke("task_validate", Map.of("title", "标题", "classification", "X"));
         assertFalse(result.path("valid").asBoolean());
         assertTrue(result.path("violations").toString().contains("分类"));
+    }
+
+    @Test
+    void consolidatesCandidatesIntoStableTasks() {
+        var candidate = Map.of(
+            "title", "统一对账口径", "classification", "L2",
+            "owner", Map.of("resolvedOpenId", "ou_1", "displayName", "张三", "ambiguous", false),
+            "evidence", List.of(Map.of("sourceType", "minutes", "sourceId", "ob_1", "anchor", "minutes#3",
+                "quote", "张三：统一对账口径。")),
+            "suggestedDueDate", "2026-11-30",
+            "upstreamTaskRefs", List.of("UP-1"));
+        var result = invoke("task_consolidate", Map.of(
+            "candidates", List.of(candidate, candidate),
+            "upstreamTaskKeys", List.of("UP-1", "UP-2")));
+        assertFalse(result.path("isError").asBoolean());
+        assertEquals(1, result.path("tasks").size());
+        assertTrue(result.path("tasks").get(0).path("taskKey").asText().startsWith("T-"));
+        assertEquals("UP-1", result.path("coveredUpstream").get(0).asText());
+        assertEquals("UP-2", result.path("uncoveredUpstream").get(0).asText());
     }
 
     @Test

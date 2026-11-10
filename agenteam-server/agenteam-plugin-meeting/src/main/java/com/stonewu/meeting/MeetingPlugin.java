@@ -14,6 +14,7 @@ import com.stonewu.meeting.service.MeetingEvidenceNormalizer;
 import com.stonewu.meeting.service.MeetingPeopleResolver;
 import com.stonewu.meeting.service.MeetingReadService;
 import com.stonewu.meeting.service.MeetingResultValidator;
+import com.stonewu.meeting.service.TaskConsolidationService;
 import com.stonewu.plugin.api.JavaPluginContext;
 import com.stonewu.plugin.api.JavaToolPlugin;
 import com.stonewu.tool.api.ToolSpec;
@@ -42,6 +43,7 @@ public final class MeetingPlugin implements JavaToolPlugin {
     private final MeetingPeopleResolver peopleResolver = new MeetingPeopleResolver();
     private final MeetingEvidenceNormalizer evidenceNormalizer = new MeetingEvidenceNormalizer();
     private final MeetingResultValidator validator = new MeetingResultValidator();
+    private final TaskConsolidationService consolidation = new TaskConsolidationService();
 
     @Override
     public List<ToolSpec> tools() {
@@ -61,6 +63,7 @@ public final class MeetingPlugin implements JavaToolPlugin {
                 case "transcript_get" -> transcript(arguments, configuration, context);
                 case "meeting_people_resolve" -> peopleResolve(arguments);
                 case "task_validate" -> taskValidate(arguments);
+                case "task_consolidate" -> taskConsolidate(arguments);
                 default -> error("UNKNOWN_TOOL", "此插件不支持请求的工具。");
             };
         } catch (MeetingError invalid) {
@@ -146,17 +149,8 @@ public final class MeetingPlugin implements JavaToolPlugin {
     }
 
     private Map<String, Object> taskValidate(Map<String, Object> args) {
-        String title = requiredString(args, "title");
-        TaskClassification classification = TaskClassification.fromCode(string(args, "classification"));
-        OwnerCandidate owner = owner(args.get("owner"));
-        LocalDate dueDate = date(args.get("suggestedDueDate"));
-        boolean needsReview = bool(args, "needsReview");
-        List<String> reviewReasons = strings(args, "reviewReasons");
-        List<TaskEvidence> evidence = evidence(args.get("evidence"));
-
-        TaskProposal proposal = new TaskProposal(title, null, classification, null, null, owner,
-            List.of(), null, dueDate, null, null, evidence, List.of(), needsReview, reviewReasons);
-        var outcome = validator.validate(proposal);
+        requiredString(args, "title");
+        var outcome = validator.validate(proposal(args));
 
         var result = new LinkedHashMap<String, Object>();
         result.put("content", outcome.valid() ? "任务候选通过校验。"
@@ -166,6 +160,46 @@ public final class MeetingPlugin implements JavaToolPlugin {
         result.put("violations", outcome.violations());
         result.put("needsReview", outcome.needsReview());
         return result;
+    }
+
+    private Map<String, Object> taskConsolidate(Map<String, Object> args) {
+        if (!(args.get("candidates") instanceof List<?> list) || list.isEmpty()) {
+            throw MeetingError.invalidArgument("缺少任务候选 candidates");
+        }
+        List<TaskProposal> proposals = new ArrayList<>(list.size());
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                proposals.add(proposal(map));
+            }
+        }
+        var outcome = consolidation.consolidate(proposals, strings(args, "upstreamTaskKeys"));
+
+        var result = new LinkedHashMap<String, Object>();
+        result.put("content", "已合并为 " + outcome.tasks().size() + " 条任务。");
+        result.put("isError", false);
+        result.put("tasks", outcome.tasks().stream().map(MeetingPlugin::consolidatedMap).toList());
+        result.put("coveredUpstream", outcome.coveredUpstream());
+        result.put("uncoveredUpstream", outcome.uncoveredUpstream());
+        return result;
+    }
+
+    private TaskProposal proposal(Map<?, ?> map) {
+        return new TaskProposal(
+            str(map, "title"),
+            str(map, "description"),
+            TaskClassification.fromCode(str(map, "classification")),
+            str(map, "deliverable"),
+            str(map, "acceptanceCriteria"),
+            owner(map.get("owner")),
+            strings(map, "collaborators"),
+            str(map, "departmentCode"),
+            date(map.get("suggestedDueDate")),
+            str(map, "priority"),
+            str(map, "riskLevel"),
+            evidence(map.get("evidence")),
+            strings(map, "upstreamTaskRefs"),
+            bool(map, "needsReview"),
+            strings(map, "reviewReasons"));
     }
 
     private MeetingReadService readService(Map<String, Object> config) {
@@ -266,6 +300,34 @@ public final class MeetingPlugin implements JavaToolPlugin {
         map.put("content", message);
         map.put("isError", true);
         map.put("code", code);
+        return map;
+    }
+
+    private static Map<String, Object> consolidatedMap(TaskConsolidationService.ConsolidatedTask task) {
+        var map = new LinkedHashMap<String, Object>();
+        TaskProposal p = task.proposal();
+        map.put("taskKey", task.taskKey());
+        map.put("title", p.title());
+        map.put("classification", p.classification() == null ? null : p.classification().name());
+        map.put("owner", p.owner() == null ? null : ownerMap(p.owner()));
+        map.put("suggestedDueDate", p.suggestedDueDate() == null ? null : p.suggestedDueDate().toString());
+        map.put("evidence", p.evidence().stream().map(MeetingPlugin::evidenceMap).toList());
+        map.put("upstreamTaskRefs", p.upstreamTaskRefs());
+        map.put("collaborators", p.collaborators());
+        map.put("needsReview", p.needsReview());
+        map.put("reviewReasons", p.reviewReasons());
+        return map;
+    }
+
+    private static Map<String, Object> evidenceMap(TaskEvidence e) {
+        var map = new LinkedHashMap<String, Object>();
+        map.put("sourceType", e.sourceType());
+        map.put("sourceId", e.sourceId());
+        map.put("anchor", e.anchor());
+        map.put("quote", e.quote());
+        map.put("paragraphIndex", e.paragraphIndex());
+        map.put("startOffset", e.startOffset());
+        map.put("endOffset", e.endOffset());
         return map;
     }
 

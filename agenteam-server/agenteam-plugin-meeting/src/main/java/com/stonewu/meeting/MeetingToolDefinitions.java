@@ -23,7 +23,8 @@ final class MeetingToolDefinitions {
             minutesGet(),
             transcriptGet(),
             peopleResolve(),
-            taskValidate()
+            taskValidate(),
+            taskConsolidate()
         );
     }
 
@@ -124,6 +125,43 @@ final class MeetingToolDefinitions {
                 "reviewReasons", Map.of("type", "array", "items", Map.of("type", "string"),
                     "description", "需复核的原因。")),
             List.of("title", "classification"));
+    }
+
+    private static ToolSpec taskConsolidate() {
+        return tool("task_consolidate", "合并任务候选", "按稳定 task_key 对任务候选去重合并，并判定上游承诺覆盖。"
+            + "相同规范化标题与负责人合并为一条，证据与上游引用取并集，分类取更重一侧，截止日期取最早。"
+            + "返回合并后的候选、被覆盖的上游 task_key 与未覆盖列表。",
+            Map.of("candidates", Map.of("type", "array", "minItems", 1,
+                "items", Map.of("type", "object",
+                    "properties", Map.of("title", Map.of("type", "string"),
+                        "classification", Map.of("type", "string", "enum", List.of("L1", "L2", "L3")),
+                        "owner", Map.of("type", "object",
+                            "properties", Map.of("resolvedOpenId", Map.of("type", "string"),
+                                "resolvedUserId", Map.of("type", "string"),
+                                "displayName", Map.of("type", "string"),
+                                "ambiguous", Map.of("type", "boolean"),
+                                "reasons", Map.of("type", "array", "items", Map.of("type", "string")))),
+                        "evidence", Map.of("type", "array",
+                            "items", Map.of("type", "object",
+                                "properties", Map.of("sourceType", Map.of("type", "string", "enum", List.of("minutes", "transcript")),
+                                    "sourceId", Map.of("type", "string"),
+                                    "anchor", Map.of("type", "string"),
+                                    "quote", Map.of("type", "string"),
+                                    "paragraphIndex", Map.of("type", "integer"),
+                                    "startOffset", Map.of("type", "integer"),
+                                    "endOffset", Map.of("type", "integer")),
+                                "additionalProperties", false)),
+                        "suggestedDueDate", Map.of("type", "string"),
+                        "upstreamTaskRefs", Map.of("type", "array", "items", Map.of("type", "string")),
+                        "collaborators", Map.of("type", "array", "items", Map.of("type", "string")),
+                        "needsReview", Map.of("type", "boolean"),
+                        "reviewReasons", Map.of("type", "array", "items", Map.of("type", "string"))),
+                    "required", List.of("title"),
+                    "additionalProperties", false),
+                "description", "任务候选列表，来自会议分析。"),
+                "upstreamTaskKeys", Map.of("type", "array", "items", Map.of("type", "string"),
+                    "description", "需检查覆盖的上游任务 task_key 列表，可省略。")),
+            List.of("candidates"));
     }
 
     private static ToolSpec tool(String name, String title, String description,
