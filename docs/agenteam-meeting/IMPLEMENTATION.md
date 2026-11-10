@@ -11,7 +11,7 @@
 | M0 | 架构/领域审计 + 版本提升 0.6.0 | 完成 | 3fc41e2 |
 | M1 | 插件基础（模块/领域模型/只读工具/Validator/Skill/桥接契约） | 完成 | 0c14ec0 |
 | M3 | 智能分析领域层（分类/证据/去重/负责人/上游/评估集） | 完成 | 见 M3 记录 |
-| M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 未开始 | — |
+| M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 完成 | 8da0558 |
 | M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 未开始 | — |
 | M5 | 确认闭环（卡片/回调） | 未开始 | — |
 | M6 | 持续督办（Schedule action） | 未开始 | — |
@@ -49,6 +49,30 @@
 - 验证：插件单元测试增至 28 项全通过；固定评估集 `meeting-eval-set.json` + `MeetingEvalSetTest` 可复现。
 - 阈值：见 [M3-EVAL.md](M3-EVAL.md)（分类/证据/负责人/去重/错误阻断阈值）。
 - 剩余：模型语义层（从纪要/逐字稿提取候选的召回与准确率）留待 M7 真实租户 + 模型链路评分。
+
+## M2 记录
+
+- 完成：宿主侧事件驱动链路（不另建执行引擎，复用 Agent Runtime 与 background_job 租约）。
+  - 迁移 `V0.6.0.1`：`meeting_subscription`（订阅声明，固定插件版本+雇佣+事件类型）与
+    `meeting_event`（持久收件箱），并扩展 `background_job` CHECK 允许 `meeting_event` 类型。
+  - 事件识别 `MeetingEventNormalizer`：`meeting.`/`minutes.` 前缀识别，`app_id`/`tenant_key`
+    归属校验（不匹配抛 `MEETING_APPLICATION_MISMATCH`）。
+  - 事件入口 `MeetingEventIngressService`：挂在 `ChatConnectionManager` 飞书连接事件路由，
+    先落收件箱再按 `(enterprise, integration_id, event_id)` 去重；未订阅的会议事件不持久正文。
+  - 投递 `MeetingEventTransactions`/`MeetingEventWorker`：复用宿主租约（claim/renew/finish），
+    以订阅配置者服务身份（`MeetingEventAccessService`）触发 Run；Run 创建与 `run_id` 回写同一事务，
+    A03 崩溃恢复不产生重复有效 Run；插件升级/卸载后版本不匹配 → `ignored(PLUGIN_VERSION_MISMATCH)`，
+    订阅缺失/配额不足 → `ignored`，403/404 → 终态失败，其余按租约次数退避重试。
+  - 订阅 API：`/api/v1/enterprises/{id}/meeting/subscriptions` GET/POST/PATCH/DELETE，
+    声明集成、事件类型、雇佣与固定插件版本。
+- 验证：
+  - `mvn -Dtest=MeetingEventNormalizerTest test` → 7 项全通过（识别、归属校验、非会议事件拒绝）。
+  - `mvn -Dtest=MeetingEventSchemaTest test`（Docker mysql:8.4.11）→ 2 项全通过：迁移从零初始化、
+    订阅/事件唯一键去重、企业外键链、后台任务类型扩展。
+  - `mvn compile` → BUILD SUCCESS。
+- 剩余：飞书真实事件类型清单与信封字段需 M7 真实租户 POC 校准（订阅 API 已按 `event_type` 自由声明）；
+  A03/A15 的 Run 创建与回写同事务、版本不匹配停用的完整链路集成测试留待 M4 飞书同步旅程测试补足
+  （当前以事务边界代码路径 + 迁移约束覆盖）。
 
 ## 恢复入口
 
