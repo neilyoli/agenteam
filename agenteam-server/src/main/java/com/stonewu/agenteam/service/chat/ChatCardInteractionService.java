@@ -3,8 +3,11 @@ package com.stonewu.agenteam.service.chat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stonewu.agenteam.service.http.ApiException;
 import com.stonewu.agenteam.service.integration.ChannelProviderException;
+import com.stonewu.agenteam.service.meeting.MeetingConfirmationCallbackService;
+import com.stonewu.agenteam.service.meeting.MeetingConfirmationCard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import java.time.Clock;
 
@@ -13,10 +16,14 @@ import java.time.Clock;
 public class ChatCardInteractionService {
     private static final Logger LOG = LoggerFactory.getLogger(ChatCardInteractionService.class);
     private final ChatCardInteractionTransactions transactions;
+    private final ObjectProvider<MeetingConfirmationCallbackService> meetingConfirmations;
     private final Clock clock;
 
-    public ChatCardInteractionService(ChatCardInteractionTransactions transactions, Clock clock) {
+    public ChatCardInteractionService(ChatCardInteractionTransactions transactions,
+                                      ObjectProvider<MeetingConfirmationCallbackService> meetingConfirmations,
+                                      Clock clock) {
         this.transactions = transactions;
+        this.meetingConfirmations = meetingConfirmations;
         this.clock = clock;
     }
 
@@ -24,6 +31,10 @@ public class ChatCardInteractionService {
         var timing = new ChatCallbackTiming(clock);
         String outcome = "成功";
         try {
+            var meeting = meetingConfirmations.getIfAvailable();
+            if (meeting != null && MeetingConfirmationCard.isMeetingAction(event)) {
+                return meeting.accept(enterprise, bot, lease, credentialRevision, bindingRevision, event);
+            }
             return transactions.accept(enterprise, bot, lease, credentialRevision, bindingRevision, event, timing);
         } catch (RuntimeException failure) {
             outcome = failure instanceof ApiException api ? api.code() : "处理失败";

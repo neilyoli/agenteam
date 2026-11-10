@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stonewu.agenteam.mapper.meeting.MeetingConfirmationMapper">
+
+  <update id="answer">
+    UPDATE meeting_confirmation SET status = #{toStatus}, confirm_comment = #{comment},
+      last_event_id = #{eventId}, revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+      AND status = 'pending' AND task_version = #{expectedVersion}
+      AND (last_event_id IS NULL OR last_event_id &lt;&gt; #{eventId})
+  </update>
+
+  <update id="recordCard">
+    UPDATE meeting_confirmation SET card_message_id = #{messageId}, card_command_id = #{commandId},
+      updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+  </update>
+
+  <update id="beginRound">
+    UPDATE meeting_confirmation SET task_version = #{taskVersion}, owner_user_id = #{ownerUserId},
+      owner_subject = #{ownerSubject}, status = #{status}, confirm_comment = NULL,
+      card_message_id = NULL, last_event_id = NULL, revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+  </update>
+
+</mapper>

@@ -5,8 +5,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stonewu.agenteam.service.http.ApiException;
+import com.stonewu.agenteam.service.meeting.MeetingConfirmationCallbackService;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 
 import java.time.Clock;
@@ -47,7 +49,9 @@ class ChatCallbackTimingTest {
         var event = json.createObjectNode();
         event.putObject("header").put("event_id", "timing-event");
         event.putObject("event").put("answer", "仅测试使用的敏感答案").put("token", "synthetic-secret");
-        var service = new ChatCardInteractionService(transactions, Clock.systemUTC());
+        ObjectProvider<MeetingConfirmationCallbackService> meetingConfirmations = mock(ObjectProvider.class);
+        when(meetingConfirmations.getIfAvailable()).thenReturn(null);
+        var service = new ChatCardInteractionService(transactions, meetingConfirmations, Clock.systemUTC());
         when(transactions.accept(eq("enterprise"), eq("bot"), eq(1L), eq(1L), eq(1L), eq(event), any()))
             .thenAnswer(call -> {
                 ChatCallbackTiming timing = call.getArgument(6);
