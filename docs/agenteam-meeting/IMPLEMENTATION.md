@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | M0 | 架构/领域审计 + 版本提升 0.6.0 | 完成 | 3fc41e2 |
 | M1 | 插件基础（模块/领域模型/只读工具/Validator/Skill/桥接契约） | 完成 | 0c14ec0 |
-| M3 | 智能分析领域层（分类/证据/去重/负责人/上游） | 未开始 | — |
+| M3 | 智能分析领域层（分类/证据/去重/负责人/上游/评估集） | 完成 | 见 M3 记录 |
 | M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 未开始 | — |
 | M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 未开始 | — |
 | M5 | 确认闭环（卡片/回调） | 未开始 | — |
@@ -38,6 +38,17 @@
 - 交付：Skill 参考文件 `docs/agenteam-meeting/skills/meeting-intelligence.md`、
   `meeting-follow-up.md`（平台原生资源，导入后绑定；插件安装自动关联 Skill 为待补能力）。
 - 剩余：飞书真实端点字段以契约实现，需在 M7 用真实租户 POC 校准；写工具与任务/上游搜索由宿主承接（M2–M6）。
+
+## M3 记录
+
+- 完成：确定性分析领域层（插件侧）。
+  - 稳定任务标识 `TaskKeyService`：规范化标题 + 负责人 openId 的 SHA-256 内容哈希，跨会议/跨运行稳定。
+  - 去重合并 `TaskConsolidationService`：按 task_key 合并，证据/上游引用取并集，分类取更重（L1>L2>L3），截止日期取最早。
+  - 上游覆盖判定：根据候选 `upstreamTaskRefs` 输出 covered / uncovered。
+  - 新只读工具 `task_consolidate`；`task_validate` 复用统一候选解析。
+- 验证：插件单元测试增至 28 项全通过；固定评估集 `meeting-eval-set.json` + `MeetingEvalSetTest` 可复现。
+- 阈值：见 [M3-EVAL.md](M3-EVAL.md)（分类/证据/负责人/去重/错误阻断阈值）。
+- 剩余：模型语义层（从纪要/逐字稿提取候选的召回与准确率）留待 M7 真实租户 + 模型链路评分。
 
 ## 恢复入口
 
