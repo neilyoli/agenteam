@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stonewu.agenteam.mapper.meeting.MeetingFollowUpMapper">
+
+  <update id="remind">
+    UPDATE meeting_follow_up SET next_reminder_at = #{nextReminderAt}, last_evidence_json = #{evidenceJson},
+      revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+      AND status = 'active' AND (next_reminder_at IS NULL OR next_reminder_at &lt;= #{now})
+  </update>
+
+  <update id="recordSent">
+    UPDATE meeting_follow_up SET last_reminder_at = #{now}, reminder_count = reminder_count + 1,
+      revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+  </update>
+
+</mapper>

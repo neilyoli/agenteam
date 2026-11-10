@@ -66,6 +66,33 @@ public class MeetingBitableClient {
         return fields;
     }
 
+    /** 分页读取飞书记录，供督办扫描读取任务宽表最新状态；不返回凭证或原始响应正文。 */
+    public MeetingRecordPage listRecords(String connection, String token, String appToken, String tableId,
+                                         String pageToken, int pageSize) {
+        try {
+            Map<String, String> query = new LinkedHashMap<>();
+            query.put("page_size", String.valueOf(Math.max(1, Math.min(500, pageSize))));
+            if (pageToken != null && !pageToken.isBlank()) {
+                query.put("page_token", pageToken);
+            }
+            JsonNode body = requireSuccess(http.get(connection,
+                endpoints.feishu(BITABLE + appToken + "/tables/" + tableId + "/records"), query, token));
+            JsonNode data = body.path("data");
+            List<MeetingRecord> records = new ArrayList<>();
+            for (JsonNode item : data.path("items")) {
+                String recordId = item.path("record_id").asText(null);
+                JsonNode fields = item.path("fields");
+                if (recordId != null && fields != null && fields.isObject()) {
+                    records.add(new MeetingRecord(recordId, fields));
+                }
+            }
+            return new MeetingRecordPage(records, data.path("has_more").asBoolean(false),
+                data.path("page_token").asText(null));
+        } catch (ChannelProviderException failure) {
+            throw new MeetingBitableException("飞书记录列表请求失败", true, failure);
+        }
+    }
+
     public String findRecordId(String connection, String token, String appToken, String tableId,
                                String keyField, String keyValue) {
         try {
@@ -164,5 +191,13 @@ public class MeetingBitableClient {
                 target.set(name, json.valueToTree(value));
             }
         });
+    }
+
+    /** 一条飞书记录：record_id 与字段对象（字段名 → 值）。 */
+    public record MeetingRecord(String recordId, JsonNode fields) {
+    }
+
+    /** 飞书记录分页结果。 */
+    public record MeetingRecordPage(List<MeetingRecord> records, boolean hasMore, String pageToken) {
     }
 }

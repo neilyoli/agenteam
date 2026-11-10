@@ -14,7 +14,7 @@
 | M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 完成 | 8da0558 |
 | M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 完成 | 见 M4 记录 |
 | M5 | 确认闭环（卡片/回调） | 完成 | d9cfc25 |
-| M6 | 持续督办（Schedule action） | 未开始 | — |
+| M6 | 持续督办（Schedule action） | 完成 | 见 M6 记录 |
 | M7 | 验收发布 | 未开始 | — |
 
 ## M0 记录
@@ -132,6 +132,39 @@
 - 剩余：同步完成后自动发卡的宿主→插件负责人解析桥接、重新确认触发新 Run
   （`RunSubmissionService.meetingRevision` + `MeetingEventAccessService.requireOwner`）留待 M6 补充；
   真实飞书端到端发卡与回调（A05/A10 现场链路）无凭据，未以 mock 冒充真实验收，留待 M7。
+
+## M6 记录
+
+- 完成：复用宿主 Schedule 触发的持续督办（无智能体额度，仅确定性扫描 + 限频催办）。
+  - 迁移 `V0.6.0.4`：`meeting_follow_up`（逐任务催办台账，`UNIQUE(enterprise_id, binding_id, business_key)`，
+    只做限频去重与证据快照）与 `meeting_follow_up_scan`（每次 Schedule 发生记录一个扫描作业，
+    外键链到企业/绑定，状态与重试 CHECK），任务业务状态仍以飞书为唯一事实来源。
+  - `MeetingFollowUpPolicy`：绑定 + 提醒间隔 + 工作时段（Asia/Shanghai）+ 跟进条件的固化快照；
+    `MeetingFollowUpClassifier`：确定性候选识别（未确认/逾期/上游未覆盖），解析负责人 open_id、日期、
+    文本，附来源证据（标题/截止日期/证据定位/未覆盖上游）。
+  - `MeetingFollowUpStore`：台账 `remind` 以 `next_reminder_at` 原子抢占限频槽位，扫描作业
+    `claim/complete/fail/block` 用 `claim_token + lease_until` 防过期 Worker 回写；失败退避带抖动。
+  - `MeetingFollowUpTransactions`：领取扫描 → 读飞书宽表最新状态（分页 `listRecords`）→ 逐条识别 →
+    台账限频 → 工作时段内才催办 → 负责人卡片投递 → 成功才 `recordSent`；不可重试错误 `block`、
+    可重试错误 `fail` 退避、非工作时段完成并记 `outside_window`。
+  - `MeetingFollowUpActionHandler`（`meeting.follow_up`）：`prepare` 校验绑定（task 类型且启用）、
+    提醒间隔/工作时段/跟进条件、强制 `maxRetries=0`；`submit` 只排入扫描作业（事务内不调网络）；
+    `cancel` 阻断该发生记录未处理作业；`reconcile` 汇总各扫描作业结果并给 running/completed/failed/blocked。
+  - `MeetingFollowUpResultService`：按扫描结果聚合候选数/催办数/限频跳过数/失败数，作为发生记录状态证据。
+  - 只读可观测 API：`/api/v1/enterprises/{id}/meeting/follow-up`（台账列表）与 `/scans`（扫描作业列表）。
+- 验证：
+  - 纯单元：`MeetingFollowUpClassifierTest`（5：未确认/逾期/上游未覆盖判定、负责人解析、无匹配跳过）、
+    `MeetingFollowUpPolicyTest`（2：工作时段/冷却/条件）、`MeetingFollowUpTransactionsTest`
+    （4：限频不重发、催办成功回填、非工作时段跳过、投递失败单独计数）、
+    `MeetingFollowUpActionHandlerTest`（4：策略快照与强制零重试、非 task 绑定拒绝、非零重试拒绝、提交排入扫描）。
+  - Docker（mysql:8.4.11）：`MeetingFollowUpSchemaTest`（3：建表/唯一键/CHECK/外键、remind 限频栅栏与
+    recordSent 累计、扫描 claim/complete 令牌栅栏与取消阻断与耗尽标记）。
+  - `mvn -o compile` → BUILD SUCCESS；M6 合计 18 项测试全部通过。
+- 说明：角色看板由企业统一飞书 Base 视图承载（会议主表 + 督办宽表，按负责人/状态分视角），
+  本阶段交付的是“提醒”确定性闭环；升级/修订/关闭等智能动作由 `meeting-follow-up` Skill 承载，留待 M7。
+- 剩余：同步完成后自动发卡、重新确认触发新 Run 的宿主桥接（M5 遗留）继续顺延 M7；
+  飞书真实字段值形状（日期毫秒/人员对象/单选标记）与工作时段时区需 M7 真实租户 POC 校准；
+  真实端到端催办投递无凭据，未以 mock 冒充真实验收。
 
 ## 恢复入口
 
