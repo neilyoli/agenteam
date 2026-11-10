@@ -12,7 +12,7 @@
 | M1 | 插件基础（模块/领域模型/只读工具/Validator/Skill/桥接契约） | 完成 | 0c14ec0 |
 | M3 | 智能分析领域层（分类/证据/去重/负责人/上游/评估集） | 完成 | 见 M3 记录 |
 | M2 | 事件驱动（订阅/Inbox/Delivery/服务身份/事件触发 Run） | 完成 | 8da0558 |
-| M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 未开始 | — |
+| M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 完成 | 见 M4 记录 |
 | M5 | 确认闭环（卡片/回调） | 未开始 | — |
 | M6 | 持续督办（Schedule action） | 未开始 | — |
 | M7 | 验收发布 | 未开始 | — |
@@ -73,6 +73,37 @@
 - 剩余：飞书真实事件类型清单与信封字段需 M7 真实租户 POC 校准（订阅 API 已按 `event_type` 自由声明）；
   A03/A15 的 Run 创建与回写同事务、版本不匹配停用的完整链路集成测试留待 M4 飞书同步旅程测试补足
   （当前以事务边界代码路径 + 迁移约束覆盖）。
+
+## M4 记录
+
+- 完成：系统到飞书的可靠投递，机制来源复核见 [M4-SOURCE.md](M4-SOURCE.md)。
+  - 迁移 `V0.6.0.2`：`meeting_binding`（企业统一 Base 绑定，`UNIQUE(enterprise_id, business_type)`，
+    外键链到企业/接入/成员，状态与业务类型 CHECK）与 `meeting_sync_outbox`（版本化投递箱，
+    `UNIQUE(enterprise_id, binding_id, business_key)`，`delivered_version <= desired_version`、尝试次数 CHECK）。
+  - 字段白名单 `MeetingFieldCode`（约 50 项，AI 提议/人工/技术三类所有权）与结果键 `MeetingWritebackResult`；
+    人工字段（确认/执行进度）以飞书为唯一事实来源，不可配置为系统可写目标、绝不进入投递 payload。
+  - `MeetingBitableFieldValidator`：映射白名单 + 唯一键覆盖 + 去重 + 拒绝人工字段；回写结果键归一化；
+    联网按真实 schema 校验字段存在且类型可写（Formula/Currency 只读明确报错）。
+  - `MeetingBitableClient`：沿用宿主 `IntegrationHttpClient`/`IntegrationTokenService` 的
+    listFields/findRecordId/create/update 窄接口；异常按可重试（5xx/429/限流码）与阻断（其余非 0 码）分类，
+    不输出凭证与原始响应正文。
+  - `MeetingBindingStore`/`MeetingBindingApiService`/`MeetingBindingApiController`：绑定管理
+    （列表/创建/更新/启停/删除），保存前在非事务门面完成真实 schema 校验再落库。
+  - 版本化 Outbox：`MeetingSyncOutbox`（`Attempt` 记录 + 入队/领取/绑定/完成/失败/阻断/补推/到期扫描），
+    `MeetingSyncOutboxSqlMapper`（upsert 版本递增且 `create_token` 稳定、claim 栅栏 `claim_token`+`lease_until`、
+    find-before-create 对账、失败退避 `min(300, 5<<min(6,n-1))` 带抖动）。
+  - `MeetingSyncTransactions`（领取→对账→幂等创建→字段级 update→回写同步状态）、`MeetingSyncWorker`+
+    `MeetingSyncScheduling`（单有界线程轮询）、`MeetingSyncCommandService`（受控宿主命令，业务候选与 Outbox
+    同事务、白名单与所有权校验、映射为飞书字段级 patch）、`MeetingSyncApiService`/`MeetingSyncApiController`
+    （管理员失败队列对账与补推）。
+- 验证：
+  - `mvn -Dtest=MeetingBitableFieldValidatorTest test` → 9 项全通过（映射白名单/唯一键/人工字段/只读类型/回写归一化）。
+  - `mvn -Dtest=MeetingSyncSchemaTest test`（Docker mysql）→ 4 项全通过：建表、唯一键与 CHECK 约束、
+    版本递增且 create_token 稳定、claim 栅栏互斥、complete 推进 delivered_version、fail 退避/block/retry 重置。
+  - `mvn -o compile` → BUILD SUCCESS。
+- 剩余：回写字段（sync_time 等）的类型转换与飞书真实租户字段类型需 M7 POC 校准；
+  插件桥接到 `MeetingSyncCommandService.publish` 的宿主服务桥接契约留待 M5/M7；
+  真实飞书端到端投递（A08/A13/A19）无凭据，未以 mock 冒充真实验收。
 
 ## 恢复入口
 

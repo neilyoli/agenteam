@@ -59,6 +59,12 @@ public class IntegrationHttpClient {
             new ChannelRequestDiagnostics(Map.of(), body, bearer, json));
     }
 
+    public ChannelHttpResponse put(String connection, URI address, JsonNode body, String bearer) {
+        var content = RequestBody.create(body.toString(), MediaType.get("application/json; charset=utf-8"));
+        return execute(connection, new Request.Builder().url(address.toString()).put(content), null, bearer,
+            new ChannelRequestDiagnostics(Map.of(), body, bearer, json));
+    }
+
     public ChannelHttpResponse postForm(String connection, URI address, Map<String, String> fields, Set<String> expectedErrors) {
         var form = new FormBody.Builder();
         fields.forEach(form::add);
