@@ -147,11 +147,13 @@ class ScheduledNotificationManagementApiTest extends ExecutionApiTestSupport {
     private void optionEndpointsReturnActualActionSchemasAndScopedRecipients() throws Exception {
         var actions = data(mvc.perform(get(base() + "/schedule-actions").cookie(cookie)).andExpect(status().isOk()).andReturn());
         actions.forEach(item -> schemas.validate("ScheduleActionOption", item));
-        assertEquals(2, actions.size());
+        assertEquals(3, actions.size());
         assertEquals("agent.run", actions.get(0).path("type").asText());
         assertTrue(actions.get(0).path("usesAgent").asBoolean());
-        assertEquals("notification.send", actions.get(1).path("type").asText());
-        assertEquals(50, actions.get(1).at("/configSchema/properties/recipients/maxItems").asInt());
+        assertEquals("meeting.follow_up", actions.get(1).path("type").asText());
+        assertFalse(actions.get(1).path("usesAgent").asBoolean());
+        assertEquals("notification.send", actions.get(2).path("type").asText());
+        assertEquals(50, actions.get(2).at("/configSchema/properties/recipients/maxItems").asInt());
         var people = data(mvc.perform(get(base() + "/schedule-recipients").cookie(cookie)).andExpect(status().isOk()).andReturn());
         people.path("items").forEach(item -> schemas.validate("ScheduleRecipientOption", item));
         assertEquals(admin, people.at("/items/0/userId").asText());

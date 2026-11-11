@@ -71,12 +71,28 @@ public class ExecutionToolCatalog {
                                 && !binding.config().path("builtinCode").asText().equals("group_collaboration")) {
                                 continue;
                             }
-                            boolean platform = binding.config().path("pluginType").asText().equals("builtin")
-                                && Set.of("todo_management", "schedule_management", "group_collaboration")
-                                .contains(binding.config().path("builtinCode").asText());
-                            if (platform && !run.mode().equals("interactive") && !tool.definition().operationClass()
-                                .equals("read")) {
-                                continue;
+                            // 非交互 Run 只保留各模式明确授权的写工具：会议事件与修订 Run 仅开放
+                            // 会议任务发布，计划与预览不获得会议写权限，其余写工具保持原有隐藏规则。
+                            if (!tool.definition().operationClass().equals("read")
+                                && !run.mode().equals("interactive")) {
+                                boolean meetingPublish = binding.config().path("pluginType").asText().equals("builtin")
+                                    && binding.config().path("builtinCode").asText().equals("meeting_management")
+                                    && tool.definition().name().equals("meeting_task_publish");
+                                if (run.mode().equals("meeting_event") || run.mode().equals("meeting_revision")) {
+                                    if (!meetingPublish) {
+                                        continue;
+                                    }
+                                } else {
+                                    if (meetingPublish) {
+                                        continue;
+                                    }
+                                    boolean platform = binding.config().path("pluginType").asText().equals("builtin")
+                                        && Set.of("todo_management", "schedule_management", "group_collaboration")
+                                        .contains(binding.config().path("builtinCode").asText());
+                                    if (platform) {
+                                        continue;
+                                    }
+                                }
                             }
                             if (!sourceEnabled(run, tool, sourceTools, available, javaAvailable)) {
                                 continue;

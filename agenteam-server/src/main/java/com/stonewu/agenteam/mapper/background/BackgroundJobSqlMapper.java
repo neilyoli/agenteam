@@ -77,4 +77,11 @@ public interface BackgroundJobSqlMapper extends MPJBaseMapper<BackgroundJobRow> 
             .set(BackgroundJobRow::getLeaseOwner, null).set(BackgroundJobRow::getLeaseUntil, null)
             .set(BackgroundJobRow::getHeartbeatAt, null).set(BackgroundJobRow::getUpdatedAt, now));
     }
+
+    /** 资料就绪等外部信号把仍在排队的工作立即置为可领取，用于快进等待中的会议事件。 */
+    default int releaseBackgroundJob(Timestamp now, String id) {
+        return update(new LambdaUpdateWrapper<BackgroundJobRow>().eq(BackgroundJobRow::getId, id)
+            .eq(BackgroundJobRow::getStatus, "queued").set(BackgroundJobRow::getAvailableAt, now)
+            .set(BackgroundJobRow::getUpdatedAt, now));
+    }
 }

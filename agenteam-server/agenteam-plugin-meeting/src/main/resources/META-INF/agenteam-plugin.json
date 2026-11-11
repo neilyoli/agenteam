@@ -1,0 +1,18 @@
+{
+  "name": "会议智能分析",
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "timeoutSeconds": {
+        "type": "integer",
+        "title": "接口超时秒数",
+        "description": "单次飞书接口请求的超时上限。",
+        "default": 20,
+        "minimum": 5,
+        "maximum": 60
+      }
+    },
+    "required": ["timeoutSeconds"]
+  }
+}

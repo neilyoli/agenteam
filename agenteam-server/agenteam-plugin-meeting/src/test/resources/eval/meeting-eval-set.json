@@ -1,0 +1,60 @@
+{
+  "name": "agenteam.meeting 智能分析评估集",
+  "version": "1",
+  "description": "对确定性领域层（去重、上游覆盖、分类合并、校验阻断）的人工标注样本；模型语义分析（从纪要/逐字稿提取候选）的评分留待 M7 真实租户与模型链路。",
+  "samples": [
+    {
+      "id": "dedup-cross-meeting",
+      "scenario": "跨会议重复提及同一任务（同一负责人）应去重合并证据与上游引用",
+      "candidates": [
+        {
+          "title": "统一对账口径",
+          "classification": "L2",
+          "owner": { "resolvedOpenId": "ou_1", "displayName": "张三", "ambiguous": false },
+          "evidence": [
+            { "sourceType": "minutes", "sourceId": "ob_a", "anchor": "minutes#1", "quote": "张三：11 月底前统一对账口径。" }
+          ],
+          "suggestedDueDate": "2026-11-30",
+          "upstreamTaskRefs": ["UP-1"]
+        },
+        {
+          "title": "统一对账口径",
+          "classification": "L2",
+          "owner": { "resolvedOpenId": "ou_1", "displayName": "张三", "ambiguous": false },
+          "evidence": [
+            { "sourceType": "minutes", "sourceId": "ob_b", "anchor": "minutes#2", "quote": "张三：对账口径按财务标准执行。" }
+          ],
+          "suggestedDueDate": "2026-12-01",
+          "upstreamTaskRefs": ["UP-2"]
+        }
+      ],
+      "upstreamTaskKeys": ["UP-1", "UP-2", "UP-3"],
+      "expect": { "taskCount": 1, "evidenceCount": 2, "uncoveredUpstream": ["UP-3"] }
+    },
+    {
+      "id": "higher-classification-wins",
+      "scenario": "同一任务先按 L2 后按 L1 提及，合并后取更重的 L1",
+      "candidates": [
+        { "title": "经营承诺事项", "classification": "L2", "owner": { "resolvedOpenId": "ou_1", "ambiguous": false }, "evidence": [] },
+        { "title": "经营承诺事项", "classification": "L1", "owner": { "resolvedOpenId": "ou_1", "ambiguous": false }, "evidence": [] }
+      ],
+      "upstreamTaskKeys": [],
+      "expect": { "taskCount": 1, "classification": "L1" }
+    },
+    {
+      "id": "upstream-covered",
+      "scenario": "下游任务声明覆盖了全部上游承诺，应无未覆盖项",
+      "candidates": [
+        {
+          "title": "下游覆盖任务",
+          "classification": "L2",
+          "owner": { "resolvedOpenId": "ou_1", "ambiguous": false },
+          "evidence": [],
+          "upstreamTaskRefs": ["UP-1", "UP-2"]
+        }
+      ],
+      "upstreamTaskKeys": ["UP-1", "UP-2"],
+      "expect": { "taskCount": 1, "uncoveredUpstream": [] }
+    }
+  ]
+}

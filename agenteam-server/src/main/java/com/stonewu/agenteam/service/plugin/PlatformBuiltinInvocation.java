@@ -13,6 +13,7 @@ import com.stonewu.agenteam.model.tool.entity.ToolCallRecord;
 import com.stonewu.agenteam.service.execution.ExecutionAccessService;
 import com.stonewu.agenteam.service.execution.RunLifecycleService;
 import com.stonewu.agenteam.service.execution.RunLifecycleService.ExecutionStoppedException;
+import com.stonewu.agenteam.service.meeting.MeetingRunExecutionPolicy;
 import com.stonewu.agenteam.service.http.ApiException;
 import com.stonewu.agenteam.service.tool.*;
 import org.springframework.http.HttpStatus;
@@ -38,12 +39,14 @@ public class PlatformBuiltinInvocation {
     private final ToolResultService results;
     private final ToolSchemaValidation schemas;
     private final OperationActorService operators;
+    private final MeetingRunExecutionPolicy meetingPolicy;
 
     public PlatformBuiltinInvocation(EnterpriseMapper enterprises, RunLifecycleService lifecycle,
                                      ExecutionAccessService access,
                                      ExecutionToolCatalog catalog, ToolCallMapper calls,
                                      ToolCallTransactions transactions, ToolResultService results,
-                                     ToolSchemaValidation schemas, OperationActorService operators) {
+                                     ToolSchemaValidation schemas, OperationActorService operators,
+                                     MeetingRunExecutionPolicy meetingPolicy) {
         this.enterprises = enterprises;
         this.lifecycle = lifecycle;
         this.access = access;
@@ -53,6 +56,7 @@ public class PlatformBuiltinInvocation {
         this.results = results;
         this.schemas = schemas;
         this.operators = operators;
+        this.meetingPolicy = meetingPolicy;
     }
 
     public JsonNode read(PlatformBuiltinPluginAdapter adapter, RunRecord run, ToolCallRecord call, JsonNode arguments,
@@ -80,7 +84,8 @@ public class PlatformBuiltinInvocation {
         if (!run.status().equals("running") || run.cancelRequestedAt() != null) {
             throw new ExecutionStoppedException();
         }
-        if (!run.mode().equals("interactive")) {
+        if (!run.mode().equals("interactive") && !meetingPolicy.autoPublishAllowed(run, binding)) {
+            // 会议事件 Run 只有会议任务发布这一个受控写操作可自动执行，且此处重新完整校验策略。
             throw new ApiException(HttpStatus.CONFLICT, "PLATFORM_WRITE_MODE_UNSUPPORTED",
                 "请在普通对话中确认并修改平台内容，预览和计划执行不能修改这些内容。");
         }

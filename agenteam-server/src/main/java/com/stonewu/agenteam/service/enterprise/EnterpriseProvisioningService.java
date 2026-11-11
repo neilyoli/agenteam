@@ -13,6 +13,7 @@ import com.stonewu.agenteam.service.edition.EnterpriseEditionPolicy;
 import com.stonewu.agenteam.service.edition.InstallationService;
 import com.stonewu.agenteam.service.permission.BuiltinRoleCatalog;
 import com.stonewu.agenteam.service.plugin.BuiltinPluginResourceService;
+import com.stonewu.agenteam.service.skill.BuiltinSkillResourceService;
 import com.stonewu.agenteam.service.usage.QuotaPolicyProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,13 +35,15 @@ public class EnterpriseProvisioningService {
     private final BuiltinRoleCatalog catalog;
     private final AuditEventService audit;
     private final BuiltinPluginResourceService builtinPlugins;
+    private final BuiltinSkillResourceService builtinSkills;
     private final EnterpriseEditionPolicy edition;
     private final InstallationService installation;
     private final QuotaPolicyProvider quotaPolicies;
 
     public EnterpriseProvisioningService(AuthMapper users, EnterpriseMapper enterprises, PermissionMapper permissions,
                                          BuiltinRoleCatalog catalog, AuditEventService audit,
-                                         BuiltinPluginResourceService builtinPlugins, EnterpriseEditionPolicy edition,
+                                         BuiltinPluginResourceService builtinPlugins, BuiltinSkillResourceService builtinSkills,
+                                         EnterpriseEditionPolicy edition,
                                          InstallationService installation, QuotaPolicyProvider quotaPolicies, AccountBehaviorService behavior) {
         this.behavior = behavior;
         this.users = users;
@@ -49,6 +52,7 @@ public class EnterpriseProvisioningService {
         this.catalog = catalog;
         this.audit = audit;
         this.builtinPlugins = builtinPlugins;
+        this.builtinSkills = builtinSkills;
         this.edition = edition;
         this.installation = installation;
         this.quotaPolicies = quotaPolicies;
@@ -98,6 +102,7 @@ public class EnterpriseProvisioningService {
         permissions.replaceUserRoles(administrator.id(), id, Set.of(roles.get("enterprise-admin")), now);
         enterprises.createDefaultQuota(id, quotaPolicies.initialEnterpriseLimit(), now);
         builtinPlugins.initialize(id);
+        builtinSkills.initialize(id);
         audit.record(id, current, "enterprise.create", "enterprise", id, "创建企业并设置初始管理员",
             Map.of("name", normalizedName, "createdBy", current.id(), "administratorUserId", administrator.id()));
         return new EnterpriseSummary(id, normalizedName);

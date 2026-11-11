@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stonewu.agenteam.mapper.meeting.MeetingSyncOutboxSqlMapper">
+
+  <insert id="upsert">
+    INSERT INTO meeting_sync_outbox
+      (id, enterprise_id, revision, created_at, updated_at, binding_id, business_key, command_id,
+       desired_version, delivered_version, record_id, create_token, claim_token, lease_until,
+       attempt_count, max_attempts, next_attempt_at, payload_json, last_error_code, last_request_id, run_id, status)
+    VALUES
+      (#{row.id}, #{row.enterpriseId}, 1, #{now}, #{now}, #{row.bindingId}, #{row.businessKey}, #{row.commandId},
+       1, 0, NULL, #{row.createToken}, NULL, NULL,
+       0, #{row.maxAttempts}, #{now}, #{row.payloadJson}, NULL, NULL, #{row.runId}, 'pending')
+    ON DUPLICATE KEY UPDATE
+      command_id = VALUES(command_id),
+      desired_version = desired_version + 1,
+      attempt_count = 0,
+      next_attempt_at = VALUES(next_attempt_at),
+      payload_json = VALUES(payload_json),
+      run_id = VALUES(run_id),
+      status = 'pending',
+      revision = revision + 1,
+      updated_at = VALUES(updated_at)
+  </insert>
+
+  <update id="claim">
+    UPDATE meeting_sync_outbox SET claim_token = #{token}, lease_until = #{leaseUntil},
+      attempt_count = attempt_count + 1, updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND status = 'pending'
+      AND delivered_version &lt; desired_version AND attempt_count &lt; max_attempts
+      AND next_attempt_at &lt;= #{now} AND (claim_token IS NULL OR lease_until &lt;= #{now})
+  </update>
+
+  <update id="bindRecord">
+    UPDATE meeting_sync_outbox SET record_id = #{recordId}, updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND claim_token = #{token}
+  </update>
+
+  <update id="complete">
+    UPDATE meeting_sync_outbox SET delivered_version = #{version}, claim_token = NULL, lease_until = NULL,
+      attempt_count = 0, next_attempt_at = #{nextAttemptAt}, last_error_code = NULL, last_request_id = NULL,
+      status = IF(desired_version &lt;= #{version}, 'delivered', 'pending'), updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND claim_token = #{token}
+  </update>
+
+  <update id="fail">
+    UPDATE meeting_sync_outbox SET claim_token = NULL, lease_until = NULL, next_attempt_at = #{nextAttemptAt},
+      last_error_code = #{errorCode}, last_request_id = #{requestId}, status = #{status}, updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND claim_token = #{token}
+  </update>
+
+  <update id="block">
+    UPDATE meeting_sync_outbox SET claim_token = NULL, lease_until = NULL, status = 'blocked',
+      last_error_code = #{errorCode}, last_request_id = #{requestId}, updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND claim_token = #{token}
+  </update>
+
+  <update id="retry">
+    UPDATE meeting_sync_outbox SET status = 'pending', attempt_count = 0, next_attempt_at = #{now},
+      last_error_code = NULL, last_request_id = NULL, updated_at = #{now}
+    WHERE binding_id = #{bindingId} AND business_key = #{businessKey} AND status IN ('failed','blocked')
+  </update>
+
+  <update id="markExhausted">
+    UPDATE meeting_sync_outbox SET status = 'failed', claim_token = NULL, lease_until = NULL, updated_at = #{now}
+    WHERE status = 'pending' AND attempt_count &gt;= max_attempts AND (claim_token IS NULL OR lease_until &lt;= #{now})
+  </update>
+
+</mapper>

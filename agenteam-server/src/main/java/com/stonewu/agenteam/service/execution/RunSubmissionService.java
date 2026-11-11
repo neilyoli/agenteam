@@ -13,6 +13,7 @@ import com.stonewu.agenteam.model.execution.request.PreviewInput;
 import com.stonewu.agenteam.model.execution.response.ContentBlock;
 import com.stonewu.agenteam.model.execution.response.RunAccepted;
 import com.stonewu.agenteam.model.execution.response.RunView;
+import com.stonewu.agenteam.model.meeting.entity.MeetingEventRunSnapshot;
 import com.stonewu.agenteam.model.workflow.request.WorkflowPreviewInput;
 import com.stonewu.agenteam.service.http.ApiException;
 import com.stonewu.agenteam.service.permission.EnterpriseAuthorizationService;
@@ -214,6 +215,73 @@ public class RunSubmissionService {
         return Optional.of(
             persist(actor, conversation, selected, input, prepared, manual ? "manual_schedule" : "scheduled",
                 maxRetries + 1));
+    }
+
+    /**
+     * 每次会议事件建立独立会话并固定事件标识与订阅快照；次数不足时不产生会话、消息或后台任务。
+     */
+    @Transactional
+    public Optional<RunAccepted> meetingEvent(AuthContext actor, ExecutionConfigurationService.Selection selected,
+                                              String text, String meetingEventId, String eventType, String meetingId,
+                                              String minuteToken, int maxRetries,
+                                              MeetingEventRunSnapshot snapshot) {
+        authorization.lockAndRequire(actor, "agent.run");
+        var input = configuration.input(new MessageInput(text, List.of(), List.of(), List.of(), List.of()));
+        var prepared = prepare(actor, null, selected, input, null);
+        prepared.fixed().put("sourceType", "meeting").put("meetingEventId", meetingEventId)
+            .put("meetingEventType", eventType)
+            .put("meetingSubscriptionId", snapshot.subscriptionId())
+            .put("meetingHireId", snapshot.hireId())
+            .put("meetingPluginVersion", snapshot.pluginVersion())
+            .put("meetingIntegrationId", snapshot.integrationId())
+            .put("meetingSelectedVersionId", snapshot.selectedVersionId());
+        if (snapshot.agentVersionId() != null) {
+            prepared.fixed().put("meetingAgentVersionId", snapshot.agentVersionId());
+        }
+        if (meetingId != null) {
+            prepared.fixed().put("meetingId", meetingId);
+        }
+        if (minuteToken != null) {
+            prepared.fixed().put("minuteToken", minuteToken);
+        }
+        if (!quotas.tryReserve(actor, prepared.run())) {
+            return Optional.empty();
+        }
+        String id = UUID.randomUUID().toString();
+        conversations.create(id, actor.enterpriseId(), actor.userId(), selected.agentId(), selected.versionId(),
+            selected.hireId(), title(actor, text), "normal", clock.instant());
+        var conversation = conversations.find(actor.enterpriseId(), actor.userId(), id, true).orElseThrow();
+        return Optional.of(persist(actor, conversation, selected, input, prepared, "meeting_event", maxRetries + 1));
+    }
+
+    /**
+     * 需调整意见触发的修订分析：仍以订阅配置者服务身份执行，固定来源任务与订阅快照；
+     * 次数不足时不产生会话、消息或后台任务。
+     */
+    @Transactional
+    public Optional<RunAccepted> meetingRevision(AuthContext actor, ExecutionConfigurationService.Selection selected,
+                                                 String text, String taskKey,
+                                                 MeetingEventRunSnapshot snapshot) {
+        authorization.lockAndRequire(actor, "agent.run");
+        var input = configuration.input(new MessageInput(text, List.of(), List.of(), List.of(), List.of()));
+        var prepared = prepare(actor, null, selected, input, null);
+        prepared.fixed().put("sourceType", "meeting").put("meetingRevisionTaskKey", taskKey)
+            .put("meetingSubscriptionId", snapshot.subscriptionId())
+            .put("meetingHireId", snapshot.hireId())
+            .put("meetingPluginVersion", snapshot.pluginVersion())
+            .put("meetingIntegrationId", snapshot.integrationId())
+            .put("meetingSelectedVersionId", snapshot.selectedVersionId());
+        if (snapshot.agentVersionId() != null) {
+            prepared.fixed().put("meetingAgentVersionId", snapshot.agentVersionId());
+        }
+        if (!quotas.tryReserve(actor, prepared.run())) {
+            return Optional.empty();
+        }
+        String id = UUID.randomUUID().toString();
+        conversations.create(id, actor.enterpriseId(), actor.userId(), selected.agentId(), selected.versionId(),
+            selected.hireId(), title(actor, text), "normal", clock.instant());
+        var conversation = conversations.find(actor.enterpriseId(), actor.userId(), id, true).orElseThrow();
+        return Optional.of(persist(actor, conversation, selected, input, prepared, "meeting_revision", 2));
     }
 
     /** 岗位执行复用普通执行、配额和后台工作，关联与 Run 在同一事务内提交。 */

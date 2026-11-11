@@ -40,8 +40,9 @@ class ScheduleNotificationRolloutTest extends ExecutionApiTestSupport {
     @Test
     void disabledNotificationsAreAbsentFromTheCatalogAndRejectedByTheWriteEndpoint() throws Exception {
         var available = data(mvc.perform(get(base() + "/schedule-actions").cookie(cookie)).andExpect(status().isOk()).andReturn());
-        assertEquals(1, available.size());
+        assertEquals(2, available.size());
         assertEquals("agent.run", available.get(0).path("type").asText());
+        assertEquals("meeting.follow_up", available.get(1).path("type").asText());
         var input = new ScheduleWriteRequest("暂不开放的通知", null, null, null, "daily", null, "09:15", List.of(), null, "UTC", false, 0,
             new ScheduleActionRequest("notification.send", 1, Map.of("title", "不应创建", "body", "不应发送",
                 "recipients", List.of(Map.of("userId", admin, "connectionIds", List.of())))));

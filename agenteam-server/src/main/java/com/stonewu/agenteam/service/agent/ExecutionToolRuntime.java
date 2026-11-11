@@ -309,6 +309,10 @@ public final class ExecutionToolRuntime implements AutoCloseable {
                 if (transactions.internalAction(run, binding, preparedTopLevelCalls.get(binding.alias() + ":" + json.hash(json.tree(input))))) {
                     return PermissionDecision.allow("当前岗位可以执行任务范围内的协作动作。");
                 }
+                if (transactions.meetingAutoPublishAllowed(run, binding)) {
+                    // 会议事件 Run 经专用策略校验后自动执行任务发布，不产生普通工具审批。
+                    return PermissionDecision.allow("会议事件任务发布已按订阅授权自动执行。");
+                }
                 return ToolApprovalPolicy.forRun(run).requiresApproval(binding.definition().operationClass())
                     ? PermissionDecision.ask("本次工具操作需要由原发起人确认。") : PermissionDecision.allow(
                     "当前会话策略允许执行此工具。");

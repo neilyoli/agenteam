@@ -114,12 +114,14 @@ public class BuiltinPluginResourceService {
             case "platform_basics" -> "Library";
             case "todo_management" -> "NotebookPen";
             case "schedule_management", "workflow_management" -> "GitBranch";
+            case "meeting_management" -> "Lightbulb";
             case "web_read" -> "Telescope";
             default -> "Box";
         };
         String color = switch (adapter.code()) {
             case "todo_management" -> "mint";
             case "schedule_management", "workflow_management" -> "blue";
+            case "meeting_management" -> "teal";
             case "web_read" -> "amber";
             default -> "purple";
         };

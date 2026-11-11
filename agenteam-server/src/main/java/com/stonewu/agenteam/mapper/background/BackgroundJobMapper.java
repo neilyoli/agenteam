@@ -79,4 +79,9 @@ public class BackgroundJobMapper {
         return statements.finishBackgroundJob(status, errorCode, summary, Timestamp.from(availableAt),
             Timestamp.from(now), lease.id(), lease.leaseOwner(), lease.leaseVersion()) == 1;
     }
+
+    /** 把仍在排队的后台工作立即置为可领取，用于资料就绪信号快进等待中的会议事件。 */
+    public boolean release(String jobId, Instant now) {
+        return statements.releaseBackgroundJob(Timestamp.from(now), jobId) == 1;
+    }
 }

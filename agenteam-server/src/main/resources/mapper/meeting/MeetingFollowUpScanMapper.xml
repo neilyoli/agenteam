@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stonewu.agenteam.mapper.meeting.MeetingFollowUpScanMapper">
+
+  <update id="claim">
+    UPDATE meeting_follow_up_scan SET claim_token = #{token}, lease_until = #{leaseUntil},
+      attempt_count = attempt_count + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND status = 'queued'
+      AND attempt_count &lt; max_attempts AND next_attempt_at &lt;= #{now}
+      AND (claim_token IS NULL OR lease_until &lt;= #{now})
+  </update>
+
+  <update id="complete">
+    UPDATE meeting_follow_up_scan SET claim_token = NULL, lease_until = NULL, status = 'completed',
+      result_json = #{resultJson}, last_error_code = NULL, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND claim_token = #{token}
+  </update>
+
+  <update id="fail">
+    UPDATE meeting_follow_up_scan SET claim_token = NULL, lease_until = NULL, next_attempt_at = #{nextAttemptAt},
+      last_error_code = #{errorCode}, status = #{status}, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND claim_token = #{token}
+  </update>
+
+  <update id="block">
+    UPDATE meeting_follow_up_scan SET claim_token = NULL, lease_until = NULL, status = 'blocked',
+      last_error_code = #{errorCode}, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND claim_token = #{token}
+  </update>
+
+  <update id="markExhausted">
+    UPDATE meeting_follow_up_scan SET status = 'failed', claim_token = NULL, lease_until = NULL, updated_at = #{now}
+    WHERE status = 'queued' AND attempt_count &gt;= max_attempts AND (claim_token IS NULL OR lease_until &lt;= #{now})
+  </update>
+
+  <update id="cancelByOccurrence">
+    UPDATE meeting_follow_up_scan SET status = 'blocked', claim_token = NULL, lease_until = NULL,
+      last_error_code = 'CANCELLED', updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND occurrence_id = #{occurrenceId} AND status = 'queued'
+  </update>
+
+</mapper>
