@@ -1,6 +1,7 @@
 package com.stonewu.agenteam.configuration.plugin;
 
 import com.stonewu.agenteam.mapper.plugin.PlatformToolDefinitions;
+import com.stonewu.agenteam.mapper.plugin.MeetingManagementToolDefinitions;
 import com.stonewu.agenteam.mapper.collaboration.CollaborationToolDefinitions;
 import com.stonewu.agenteam.mapper.workflow.WorkflowToolDefinitions;
 import com.stonewu.agenteam.service.plugin.PlatformBuiltinPluginAdapter;
@@ -45,5 +46,12 @@ public class PlatformBuiltinPlugins {
                                                            ObjectProvider<PlatformBusinessTools> business) {
         return new PlatformBuiltinPluginAdapter("schedule_management", "定时任务",
             "查询和管理本人的执行计划，预览未来时间，启停计划或执行一次。修改前需确认。", tools.schedules(), business);
+    }
+
+    @Bean
+    public PlatformBuiltinPluginAdapter meetingManagement(MeetingManagementToolDefinitions tools,
+                                                           ObjectProvider<PlatformBusinessTools> business) {
+        return new PlatformBuiltinPluginAdapter("meeting_management", "会议管理",
+            "把经校验的 L1/L2 会议任务发布到企业督办宽表，并检索历史任务与上游承诺。", tools.tools(), business);
     }
 }

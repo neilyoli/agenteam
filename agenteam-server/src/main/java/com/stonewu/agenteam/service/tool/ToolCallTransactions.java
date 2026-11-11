@@ -18,6 +18,7 @@ import com.stonewu.agenteam.model.tool.entity.ToolCallRecord;
 import com.stonewu.agenteam.service.execution.ExecutionAccessService;
 import com.stonewu.agenteam.service.execution.RunLifecycleService;
 import com.stonewu.agenteam.service.execution.UserQuestionTool;
+import com.stonewu.agenteam.service.meeting.MeetingRunExecutionPolicy;
 import com.stonewu.agenteam.service.http.ApiException;
 import com.stonewu.agenteam.service.security.HttpCredentialService;
 import com.stonewu.agenteam.service.security.PayloadEncryption;
@@ -58,6 +59,7 @@ public class ToolCallTransactions {
     private final FileMapper files;
     private final ToolQueryPolicy queries;
     private final CollaborationToolAuthorization collaboration;
+    private final MeetingRunExecutionPolicy meetingPolicy;
     private final RunQuestionMapper questions;
 
     public ToolCallTransactions(ToolCallMapper calls, RunApprovalMapper approvals, ExecutionToolCatalog catalog,
@@ -65,7 +67,8 @@ public class ToolCallTransactions {
                                 RunLifecycleService lifecycle, PayloadEncryption encryption, ToolPayloadMapper payloads,
                                 ToolApprovalSummaryMapper summaries, ResourceJson json, Clock clock,
                                 HttpCredentialService credentials, ToolSchemaValidation schemas, FileMapper files,
-                                ToolQueryPolicy queries, CollaborationToolAuthorization collaboration, RunQuestionMapper questions) {
+                                ToolQueryPolicy queries, CollaborationToolAuthorization collaboration,
+                                MeetingRunExecutionPolicy meetingPolicy, RunQuestionMapper questions) {
         this.calls = calls;
         this.approvals = approvals;
         this.catalog = catalog;
@@ -81,6 +84,7 @@ public class ToolCallTransactions {
         this.files = files;
         this.queries = queries;
         this.collaboration = collaboration;
+        this.meetingPolicy = meetingPolicy;
         this.questions = questions;
     }
 
@@ -319,6 +323,11 @@ public class ToolCallTransactions {
         return collaboration.isInternalAction(run, binding, call);
     }
 
+    /** 会议事件 Run 的任务发布经专用策略免审批自动执行；其余工具沿用原审批规则。 */
+    public boolean meetingAutoPublishAllowed(RunRecord run, ExecutionToolBinding binding) {
+        return meetingPolicy.autoPublishAllowed(run, binding);
+    }
+
     public boolean questionAnswered(ToolCallRecord call) {
         return call != null && questions.forTool(call.enterpriseId(), call.id()).filter(row -> "answered".equals(row.getStatus())
             && row.getRequestHash().equals(call.requestHash())).isPresent();
@@ -343,6 +352,10 @@ public class ToolCallTransactions {
         }
         collaboration.requireWrite(run, binding, call);
         if (collaboration.isInternalAction(run, binding, call)) {
+            return;
+        }
+        if (meetingPolicy.autoPublishAllowed(run, binding)) {
+            // 会议事件 Run 经专用策略完成 Run、事件、订阅与绑定校验，唯一放行会议任务发布。
             return;
         }
         var found = approvals.forTool(call);

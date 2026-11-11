@@ -105,6 +105,11 @@ public class MeetingSyncCommandService {
         return binding;
     }
 
+    /** 读取绑定的业务字段映射，供发布服务在入队前按映射过滤可投递字段。 */
+    public Map<String, String> bindingMapping(MeetingBindingRow binding) {
+        return readMapping(binding.getFieldMappingJson());
+    }
+
     private Map<String, String> readMapping(String value) {
         if (value == null || value.isBlank()) {
             return Map.of();

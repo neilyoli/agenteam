@@ -82,8 +82,11 @@ public class MeetingEventTransactions {
         }
         var actor = access.requireOwner(subscription);
         var selected = policy.select(actor, subscription.getHireId(), subscription.getAgentVersionId());
+        var snapshot = new com.stonewu.agenteam.model.meeting.entity.MeetingEventRunSnapshot(
+            subscription.getId(), subscription.getHireId(), subscription.getPluginVersion(),
+            subscription.getAgentVersionId(), row.getIntegrationId(), selected.versionId());
         var accepted = submission.meetingEvent(actor, selected, meetingPrompt(row), row.getId(), row.getEventType(),
-            row.getMeetingId(), row.getMinuteToken(), 0);
+            row.getMeetingId(), row.getMinuteToken(), 0, snapshot);
         if (accepted.isEmpty()) {
             store.markIgnored(row, "QUOTA_EXCEEDED");
             store.finish(lease, "completed", null, null, clock.instant());

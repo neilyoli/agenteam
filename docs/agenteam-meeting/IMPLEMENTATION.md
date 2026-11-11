@@ -169,7 +169,35 @@
 
 ## M7 记录
 
-- 校准（进行中）：按用户“直接联调”要求，从 magic-ai 真实源码校准飞书 Base 字段、值形状与事件类型，
+- M7-A（完成）：Agent 到宿主的任务发布闭环，实施合同见 [M7-A-IMPLEMENTATION.md](M7-A-IMPLEMENTATION.md)。
+  - 宿主内置插件 `meeting_management`（`PlatformBuiltinPlugins` 注册，图标 Lightbulb/teal）+ 唯一写工具
+    `meeting_task_publish`（`MeetingManagementToolDefinitions`，严格 JSON Schema、additionalProperties=false、
+    60 秒超时），经 `MeetingTaskPublishToolHandler`（PlatformToolHandler 扩展机制自动注册）委托
+    `MeetingTaskPublicationService`。
+  - `MeetingTaskPublicationService` 宿主二次校验：L3 返回 skipped 不入队；L1/L2 强制负责人 openId
+    （`ChatIdentityService` 按 `feishu_open_id` 解析到企业成员，未绑定/歧义拒绝）、参会人归属
+    （自动 Run 必须携带 meeting_get 参会人清单且负责人在列）、可定位证据（minutes/transcript + 锚点）、
+    截止日期（YYYY-MM-DD → 文本 `yyyy-MM-dd 00:00:00`）；技术字段（task_key/meeting_id）由宿主构造；
+    AI 提议字段按绑定映射过滤（未映射可选字段不投递，task_key/title 必须映射）；返回 queued 不声称已写入。
+  - `MeetingRunExecutionPolicy`：会议事件 Run 自动写的唯一授权判定（Run 模式/来源、收件箱事件 routed 且
+    run_id 一致、事件与快照 integration/eventType/meetingId 一致、订阅启用且 hire/pluginVersion/agentVersion
+    与快照一致、订阅配置者即 Run 身份、插件版本 active、`requireOwner` 资格、task 绑定启用且同接入）。
+    四层强制：`ExecutionToolCatalog`（meeting_event Run 只暴露 read + meeting_task_publish，scheduled/preview
+    不见会议写工具）、`ExecutionToolRuntime.checkPermissions`（策略放行免审批）、`ToolCallTransactions.requireApproval`
+    （事务内复验）、`PlatformBuiltinInvocation.write`（meeting_event 专用分支重新全量校验，其余非交互仍拒绝）。
+  - Run 快照固定：`MeetingEventTransactions` 传入 `MeetingEventRunSnapshot`（subscriptionId/hireId/pluginVersion/
+    agentVersionId/integrationId/selectedVersionId），`RunSubmissionService.meetingEvent` 写入 executionConfig，
+    模型参数不可覆盖。
+  - `MeetingFieldCode` 新增 `owner_name`（任务负责人信息）；`MeetingSyncCommandService` 暴露
+    `bindingMapping` 供发布服务按映射过滤。
+  - 任务身份过渡：`MeetingTaskIdentityService.assignKey`（标题+负责人内容哈希，M7-B 前过渡实现，
+    已独立封装，M7-B 替换为持久化稳定身份）。
+  - 验证：新增 `MeetingRunExecutionPolicyTest`(7)/`MeetingTaskPublicationServiceTest`(11)/
+    `MeetingTaskPublishToolHandlerTest`(2)/`ExecutionToolCatalogMeetingTest`(3)；`BuiltinPluginSelectionApiTest`
+    内置插件 6→7、工具 50→51；全量 `mvn -o test -Dtest=Meeting*Test` → **82 项全通过**；
+    `PlatformBuiltinToolApiTest`(5)/`PlatformToolRiskTest`(3)/`BuiltinPluginSelectionApiTest`(4) 通过。
+  - 剩余：M7-B 稳定任务身份、M7-C 同步成功后自动确认卡片、M7-D 事件过滤/Skill/资料等待、M7-E 验收。
+- 校准（完成）：按用户“直接联调”要求，从 magic-ai 真实源码校准飞书 Base 字段、值形状与事件类型，
   结论见 [M7-CALIBRATION.md](M7-CALIBRATION.md)。
   - 事件类型：`meeting.ended` / `meeting.all_meeting.ended` / `card.action.trigger` /
     `im.message.receive_v1`，统一过滤 `meetingSource==1`。
@@ -183,8 +211,7 @@
     确认评论/操作人/时间不再写 Base，审计留 MySQL `meeting_confirmation`。
   - 代码校准：`MeetingFollowUpClassifier.date()` 支持文本日期（Asia/Shanghai）解析；
     `MeetingFollowUpClassifierTest` 由 5 项增至 8 项；状态字段收敛相关 6 个生产类 + 8 个测试类
-    同步更新。全量 `mvn -o clean test -Dtest=Meeting*Test` → **62 项全通过**（14 个测试类，
-    BUILD SUCCESS，见 [M7-ACCEPTANCE.md](M7-ACCEPTANCE.md) 测试基线）。
+    同步更新。
   - 交付文档：[RUNBOOK.md](RUNBOOK.md)（运行手册：部署前提/飞书应用/绑定订阅/Skill/测试会议/
     看板/失败队列/停用恢复）与 [M7-ACCEPTANCE.md](M7-ACCEPTANCE.md)（A01–A19 验收矩阵 +
     未执行项清单）。`meeting-follow-up` Skill 已同步「任务状态」收敛。

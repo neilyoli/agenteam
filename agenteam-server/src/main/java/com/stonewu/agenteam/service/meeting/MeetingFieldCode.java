@@ -49,6 +49,7 @@ public enum MeetingFieldCode {
     DELIVERABLE("deliverable", MeetingFieldWritePolicy.AI_PROPOSED, false),
     ACCEPTANCE_CRITERIA("acceptance_criteria", MeetingFieldWritePolicy.AI_PROPOSED, false),
     OWNER("owner", MeetingFieldWritePolicy.AI_PROPOSED, false),
+    OWNER_NAME("owner_name", MeetingFieldWritePolicy.AI_PROPOSED, false),
     COLLABORATORS("collaborators", MeetingFieldWritePolicy.AI_PROPOSED, false),
     OWNER_DEPARTMENT("owner_department", MeetingFieldWritePolicy.AI_PROPOSED, false),
     DUE_DATE("due_date", MeetingFieldWritePolicy.AI_PROPOSED, false),
