@@ -2,12 +2,12 @@ package com.stonewu.agenteam.service.tool.provider;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stonewu.agenteam.mapper.resource.ResourceJson;
+import com.stonewu.agenteam.service.plugin.JavaPluginCredentialResolver;
 import com.stonewu.agenteam.service.plugin.JavaPluginRegistry;
 import com.stonewu.agenteam.service.plugin.javaworker.JavaPluginProcesses;
 import com.stonewu.agenteam.service.plugin.javaworker.JavaPluginInvocationContext;
 import com.stonewu.agenteam.service.tool.ToolCallTransactions;
 import org.springframework.beans.factory.ObjectProvider;
-import com.stonewu.agenteam.service.security.HttpCredentialService;
 import com.stonewu.tool.api.ToolContext;
 import com.stonewu.tool.api.ToolProvider;
 import com.stonewu.tool.api.ToolSource;
@@ -17,19 +17,18 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 已发布工具通过统一入口执行，Java 插件只在独立进程中接收本次配置和凭据。
- */
+/** 已发布工具通过统一入口执行，Java 插件只在独立进程中接收本次配置和宿主解析的凭据。 */
 @Component
 public class JavaPluginToolProvider implements ToolProvider {
     private final JavaPluginRegistry registry;
     private final JavaPluginProcesses processes;
-    private final HttpCredentialService credentials;
+    private final JavaPluginCredentialResolver credentials;
     private final ResourceJson json;
     private final ObjectProvider<ToolCallTransactions> transactions;
 
     public JavaPluginToolProvider(JavaPluginRegistry registry, JavaPluginProcesses processes,
-                                   HttpCredentialService credentials, ResourceJson json, ObjectProvider<ToolCallTransactions> transactions) {
+                                   JavaPluginCredentialResolver credentials, ResourceJson json,
+                                   ObjectProvider<ToolCallTransactions> transactions) {
         this.registry = registry;
         this.processes = processes;
         this.credentials = credentials;
@@ -65,7 +64,7 @@ public class JavaPluginToolProvider implements ToolProvider {
         ObjectNode request = json.tree(Map.of("mode", "invoke", "tool", tool.name(), "arguments", arguments,
             "configuration", source.configuration().getOrDefault("configuration", Map.of()))).deepCopy();
         var credentialId = (String) source.configuration().get("credentialId");
-        request.set("credentialHeaders", json.tree(credentials.resolve(context.enterpriseId(), credentialId).headers()));
+        request.set("credentialHeaders", json.tree(credentials.resolve(source.id(), context, credentialId)));
         request.put("enterpriseId", context.enterpriseId()).put("actorId", context.actorId())
             .put("runId", context.runId()).put("operationId", context.operationId());
         var invocation = new JavaPluginInvocationContext(context, () -> {

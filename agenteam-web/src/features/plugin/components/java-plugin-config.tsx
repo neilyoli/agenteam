@@ -12,7 +12,6 @@ import {AnimatedHeight} from "@/components/ui/animated-height";
 import {ApiError, apiRequest, errorMessage, reportRequestFailure} from "@/lib/http/api-client";
 import {useApiQuery} from "@/lib/http/use-api-query";
 import type {PluginConfig, PluginSource} from "@/features/resource/types/resource";
-import {CredentialPicker} from "./credential-picker";
 import {JavaPluginFields} from "./java-plugin-fields";
 import type {JavaPlugin, JavaPluginCatalog} from "../types/java-plugin";
 import styles from "./java-plugin.module.css";
@@ -136,9 +135,11 @@ export function JavaPluginConfig({enterpriseId, value, onChange, readOnly, permi
           </div> : <>
             <JavaPluginFields plugin={plugin} value={selected?.configuration ?? {}} disabled={readOnly || busy}
               onChange={(configuration) => update({configuration})}/>
-            <CredentialPicker enterpriseId={enterpriseId} value={selected?.credentialId ?? null}
-              onChange={(credentialId) => update({credentialId})} canManage={permissions.includes("credential.manage")}
-              canUse={permissions.includes("credential.use") || permissions.includes("credential.manage")} readOnly={readOnly}/>
+            {plugin.pluginId === "agenteam.meeting"
+              ? <p className={ui.description}>{t("飞书访问凭据由当前用户绑定的企业飞书接入自动提供，无需手动配置 Token。")}</p>
+              : <CredentialPicker enterpriseId={enterpriseId} value={selected?.credentialId ?? null}
+                  onChange={(credentialId) => update({credentialId})} canManage={permissions.includes("credential.manage")}
+                  canUse={permissions.includes("credential.use") || permissions.includes("credential.manage")} readOnly={readOnly}/>}
             <div className={styles.tools}><strong>{t("启用的工具")}</strong>{plugin.tools.map((tool) => <label key={tool.name} className={styles.tool}>
               <Checkbox disabled={readOnly || busy} checked={value.tools.some((selection) => selection.name === tool.name)}
                 onCheckedChange={(checked) => onChange({...value, tools: checked
