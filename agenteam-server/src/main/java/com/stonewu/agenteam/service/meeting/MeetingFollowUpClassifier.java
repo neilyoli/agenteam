@@ -7,6 +7,11 @@ import com.stonewu.agenteam.service.meeting.MeetingBitableClient.MeetingRecord;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,8 +24,21 @@ import java.util.Set;
  */
 @Component
 public class MeetingFollowUpClassifier {
-    private static final Set<String> DONE_MARKERS = Set.of("已完成", "completed", "done");
     private static final Set<String> UNCOVERED_MARKERS = Set.of("未覆盖", "uncovered", "false");
+
+    // 飞书宽表日期为文本，格式以 magic-ai 投影为准（Asia/Shanghai 业务时间）。
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
+    private static final List<DateTimeFormatter> TEXT_DATE_TIMES = List.of(
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy/M/d H:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy/M/d H:mm"));
+    private static final List<DateTimeFormatter> TEXT_DATES = List.of(
+        DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+        DateTimeFormatter.ofPattern("yyyy/M/d"),
+        DateTimeFormatter.ofPattern("yyyy年M月d日"));
 
     public Optional<MeetingFollowUpCandidate> classify(MeetingRecord record, Map<String, String> codeToFeishu,
                                                        String keyField, Set<String> conditions, Instant now) {
@@ -39,21 +57,20 @@ public class MeetingFollowUpClassifier {
             evidence.put("title", title);
         }
 
-        String confirmStatus = text(fields.get(codeToFeishu.get(MeetingFieldCode.CONFIRM_STATUS.code())));
-        if (conditions.contains(MeetingFollowUpPolicy.UNCONFIRMED) && isBlank(confirmStatus)) {
+        String taskStatus = text(fields.get(codeToFeishu.get(MeetingFieldCode.TASK_STATUS.code())));
+        if (conditions.contains(MeetingFollowUpPolicy.UNCONFIRMED) && MeetingTaskStatus.isUnconfirmed(taskStatus)) {
             reasons.add(MeetingFollowUpPolicy.UNCONFIRMED);
-            evidence.put("confirm_status", "待确认");
+            evidence.put("task_status", MeetingTaskStatus.PENDING.label());
         }
 
-        String executionStatus = text(fields.get(codeToFeishu.get(MeetingFieldCode.EXECUTION_STATUS.code())));
         Instant due = date(fields.get(codeToFeishu.get(MeetingFieldCode.DUE_DATE.code())));
         if (due != null) {
             evidence.put("due_date", due.toString());
         }
         if (conditions.contains(MeetingFollowUpPolicy.OVERDUE) && due != null && due.isBefore(now)
-            && !DONE_MARKERS.contains(normalize(executionStatus))) {
+            && !MeetingTaskStatus.isDone(taskStatus)) {
             reasons.add(MeetingFollowUpPolicy.OVERDUE);
-            evidence.put("execution_status", executionStatus == null ? "" : executionStatus);
+            evidence.put("task_status", taskStatus == null ? "" : taskStatus);
         }
 
         String covered = text(fields.get(codeToFeishu.get(MeetingFieldCode.UPSTREAM_COVERED.code())));
@@ -160,10 +177,33 @@ public class MeetingFollowUpClassifier {
             return Instant.ofEpochMilli(epoch);
         }
         if (value.isTextual()) {
-            try {
-                return Instant.parse(value.asText());
-            } catch (RuntimeException ignored) {
+            String text = value.asText().trim();
+            if (text.isEmpty()) {
                 return null;
+            }
+            try {
+                return Instant.parse(text);
+            } catch (RuntimeException isoFailure) {
+                return parseTextDate(text);
+            }
+        }
+        return null;
+    }
+
+    /** 文本日期兜底解析：yyyy-MM-dd HH:mm:ss 等，按 Asia/Shanghai 业务时间解释。 */
+    private static Instant parseTextDate(String text) {
+        for (DateTimeFormatter formatter : TEXT_DATE_TIMES) {
+            try {
+                return LocalDateTime.parse(text, formatter).atZone(SHANGHAI).toInstant();
+            } catch (DateTimeParseException ignored) {
+                // 尝试下一种受支持格式。
+            }
+        }
+        for (DateTimeFormatter formatter : TEXT_DATES) {
+            try {
+                return LocalDate.parse(text, formatter).atStartOfDay(SHANGHAI).toInstant();
+            } catch (DateTimeParseException ignored) {
+                // 尝试下一种受支持格式。
             }
         }
         return null;

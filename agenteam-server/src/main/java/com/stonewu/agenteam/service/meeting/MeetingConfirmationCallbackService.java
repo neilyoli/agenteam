@@ -68,7 +68,7 @@ public class MeetingConfirmationCallbackService {
         String cardMessageId = eventNode.path("context").path("open_message_id").asText();
         String eventId = event.path("header").path("event_id").asText();
         return confirmations.answer(enterprise, bindingId, businessKey, taskVersion, cardMessageId, action, comment,
-            actor, eventNode.path("operator").path("open_id").asText(), eventId);
+            actor, eventId);
     }
 
     private static ApiException unavailable() {

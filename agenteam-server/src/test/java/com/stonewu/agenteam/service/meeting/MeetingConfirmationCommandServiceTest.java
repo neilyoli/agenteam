@@ -45,10 +45,10 @@ class MeetingConfirmationCommandServiceTest {
             assertThrows(ApiException.class,
                 () -> service.publish(enterprise, binding.getId(), "task-1", "cmd-1", Map.of("title", "标题")));
             assertThrows(ApiException.class,
-                () -> service.publish(enterprise, binding.getId(), "task-1", "cmd-2", Map.of("execution_status", "已完成")));
-            // 只有意见、缺少确认状态
+                () -> service.publish(enterprise, binding.getId(), "task-1", "cmd-2", Map.of("description", "描述")));
+            // 缺少任务状态
             assertThrows(ApiException.class,
-                () -> service.publish(enterprise, binding.getId(), "task-1", "cmd-3", Map.of("confirm_comment", "意见")));
+                () -> service.publish(enterprise, binding.getId(), "task-1", "cmd-3", Map.of()));
         }
     }
 
@@ -63,8 +63,7 @@ class MeetingConfirmationCommandServiceTest {
             var binding = binding(access, enterprise, connection(access, enterprise, owner), owner);
             var service = service(access);
 
-            var result = service.publish(enterprise, binding.getId(), "task-1", "cmd-1", Map.of(
-                "confirm_status", "confirmed", "confirm_comment", "同意", "confirm_user", "ou_owner", "confirm_time", 1_700_000_000_000L));
+            var result = service.publish(enterprise, binding.getId(), "task-1", "cmd-1", Map.of("task_status", "进行中"));
             assertEquals(binding.getId(), result.bindingId());
             assertEquals("task-1", result.businessKey());
             assertEquals("cmd-1", result.commandId());
@@ -78,10 +77,7 @@ class MeetingConfirmationCommandServiceTest {
             Map<String, Object> payload = new ObjectMapper().readValue(outboxRow.getPayloadJson(),
                 new TypeReference<Map<String, Object>>() {
                 });
-            assertEquals("confirmed", payload.get("确认状态"));
-            assertEquals("同意", payload.get("确认意见"));
-            assertEquals("ou_owner", payload.get("确认人"));
-            assertEquals(1_700_000_000_000L, ((Number) payload.get("确认时间")).longValue());
+            assertEquals("进行中", payload.get("任务状态"));
         }
     }
 
@@ -102,9 +98,8 @@ class MeetingConfirmationCommandServiceTest {
         row.setAppToken("bascn" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         row.setTableId("tbl" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         row.setBusinessType("task");
-        row.setKeyField("任务唯一键");
-        row.setFieldMappingJson("{\"task_key\":\"任务唯一键\",\"confirm_status\":\"确认状态\",\"confirm_comment\":\"确认意见\","
-            + "\"confirm_user\":\"确认人\",\"confirm_time\":\"确认时间\"}");
+        row.setKeyField("任务ID");
+        row.setFieldMappingJson("{\"task_key\":\"任务ID\",\"task_status\":\"任务状态\"}");
         row.setStatus("enabled");
         row.setSchemaRevision("0".repeat(64));
         row.setOwnerUserId(owner);

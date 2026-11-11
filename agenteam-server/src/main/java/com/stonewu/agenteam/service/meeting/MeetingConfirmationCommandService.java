@@ -22,15 +22,13 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 可信回调授权的确认写入：负责人点击卡片后，把确认状态、意见、确认人与时间以字段级 patch
- * 写入同一版本化投递箱。仅允许人工确认字段，且只有经过身份与版本校验的回调路径才可调用，
+ * 可信回调授权的确认写入：负责人点击卡片后，把任务状态（待确认→进行中/需调整/已拒绝）以字段级
+ * patch 写入同一版本化投递箱。仅允许人工任务状态字段，且只有经过身份与版本校验的回调路径才可调用，
  * 不得向普通模型或 AI 提议字段开放可冒充确认的入口。
  */
 @Service
 public class MeetingConfirmationCommandService {
-    private static final Set<String> CONFIRM_CODES = Set.of(
-        MeetingFieldCode.CONFIRM_STATUS.code(), MeetingFieldCode.CONFIRM_COMMENT.code(),
-        MeetingFieldCode.CONFIRM_USER.code(), MeetingFieldCode.CONFIRM_TIME.code());
+    private static final Set<String> CONFIRM_CODES = Set.of(MeetingFieldCode.TASK_STATUS.code());
 
     private final MeetingBindingMapper bindings;
     private final MeetingSyncOutbox outbox;
@@ -54,7 +52,7 @@ public class MeetingConfirmationCommandService {
         for (Map.Entry<String, Object> entry : confirmFields.entrySet()) {
             String code = entry.getKey();
             if (!CONFIRM_CODES.contains(code)) {
-                throw ApiException.invalidField("fields", "确认回调只允许写入确认状态、意见、确认人与时间：" + code + "。");
+                throw ApiException.invalidField("fields", "确认回调只允许写入任务状态：" + code + "。");
             }
             MeetingFieldCode field = MeetingFieldCode.of(code);
             if (field == null || field.writePolicy() != MeetingFieldWritePolicy.MANUAL) {
@@ -69,8 +67,8 @@ public class MeetingConfirmationCommandService {
                 payload.put(feishuField, value);
             }
         }
-        if (!payload.containsKey(mapping.get(MeetingFieldCode.CONFIRM_STATUS.code()))) {
-            throw ApiException.invalidField("fields", "确认状态不能为空。");
+        if (!payload.containsKey(mapping.get(MeetingFieldCode.TASK_STATUS.code()))) {
+            throw ApiException.invalidField("fields", "任务状态不能为空。");
         }
 
         Instant now = clock.instant();

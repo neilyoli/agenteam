@@ -59,13 +59,7 @@ public enum MeetingFieldCode {
     UNCOVERED_UPSTREAM("uncovered_upstream", MeetingFieldWritePolicy.AI_PROPOSED, false),
 
     // 人工业务字段（飞书唯一事实来源，系统只读不写）
-    CONFIRM_STATUS("confirm_status", MeetingFieldWritePolicy.MANUAL, false),
-    CONFIRM_COMMENT("confirm_comment", MeetingFieldWritePolicy.MANUAL, false),
-    CONFIRM_USER("confirm_user", MeetingFieldWritePolicy.MANUAL, false),
-    CONFIRM_TIME("confirm_time", MeetingFieldWritePolicy.MANUAL, false),
-    EXECUTION_STATUS("execution_status", MeetingFieldWritePolicy.MANUAL, false),
-    COMPLETE_TIME("complete_time", MeetingFieldWritePolicy.MANUAL, false),
-    COMPLETE_EVIDENCE("complete_evidence", MeetingFieldWritePolicy.MANUAL, false);
+    TASK_STATUS("task_status", MeetingFieldWritePolicy.MANUAL, false);
 
     private final String code;
     private final MeetingFieldWritePolicy writePolicy;

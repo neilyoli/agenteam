@@ -15,12 +15,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 督办候选识别的确定性：未确认/逾期/上游未覆盖的判定与证据、负责人解析、无匹配跳过。 */
 class MeetingFollowUpClassifierTest {
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
-    private static final String KEY_FIELD = "任务唯一键";
+    private static final String KEY_FIELD = "任务ID";
     private static final Map<String, String> MAPPING = Map.of(
         MeetingFieldCode.TITLE.code(), "标题",
         MeetingFieldCode.OWNER.code(), "负责人",
-        MeetingFieldCode.CONFIRM_STATUS.code(), "确认状态",
-        MeetingFieldCode.EXECUTION_STATUS.code(), "执行状态",
+        MeetingFieldCode.TASK_STATUS.code(), "任务状态",
         MeetingFieldCode.DUE_DATE.code(), "截止日期",
         MeetingFieldCode.UPSTREAM_COVERED.code(), "上游覆盖",
         MeetingFieldCode.UNCOVERED_UPSTREAM.code(), "未覆盖上游",
@@ -29,7 +28,7 @@ class MeetingFollowUpClassifierTest {
     private final MeetingFollowUpClassifier classifier = new MeetingFollowUpClassifier();
 
     @Test
-    void flagsUnconfirmedWhenConfirmStatusBlank() {
+    void flagsUnconfirmedWhenTaskStatusBlank() {
         var fields = baseFields().put(KEY_FIELD, "task-1");
         var candidate = classifier.classify(record(fields), MAPPING, KEY_FIELD,
             Set.of(MeetingFollowUpPolicy.UNCONFIRMED), NOW);
@@ -37,13 +36,22 @@ class MeetingFollowUpClassifierTest {
         assertTrue(candidate.isPresent());
         assertTrue(candidate.get().reasons().contains(MeetingFollowUpPolicy.UNCONFIRMED));
         assertEquals("task-1", candidate.get().businessKey());
-        assertEquals("待确认", candidate.get().evidence().path("confirm_status").asText());
+        assertEquals("待确认", candidate.get().evidence().path("task_status").asText());
+    }
+
+    @Test
+    void flagsUnconfirmedWhenTaskStatusPending() {
+        var fields = baseFields().put(KEY_FIELD, "task-pending").put("任务状态", "待确认");
+        var candidate = classifier.classify(record(fields), MAPPING, KEY_FIELD,
+            Set.of(MeetingFollowUpPolicy.UNCONFIRMED), NOW);
+        assertTrue(candidate.isPresent());
+        assertTrue(candidate.get().reasons().contains(MeetingFollowUpPolicy.UNCONFIRMED));
     }
 
     @Test
     void flagsOverdueWhenDueDatePassedAndNotDone() {
         var fields = baseFields().put(KEY_FIELD, "task-2")
-            .put("确认状态", "confirmed")
+            .put("任务状态", "进行中")
             .put("截止日期", NOW.minusSeconds(3600).toEpochMilli());
         var candidate = classifier.classify(record(fields), MAPPING, KEY_FIELD,
             Set.of(MeetingFollowUpPolicy.OVERDUE), NOW);
@@ -53,11 +61,32 @@ class MeetingFollowUpClassifierTest {
     }
 
     @Test
-    void skipsOverdueWhenExecutionAlreadyDone() {
+    void flagsOverdueForTextDueDate() {
+        // 飞书宽表日期为文本 yyyy-MM-dd HH:mm:ss（Asia/Shanghai 业务时间）。
+        var fields = baseFields().put(KEY_FIELD, "task-text")
+            .put("任务状态", "进行中")
+            .put("截止日期", "2025-12-31 23:59:59");
+        var candidate = classifier.classify(record(fields), MAPPING, KEY_FIELD,
+            Set.of(MeetingFollowUpPolicy.OVERDUE), NOW);
+
+        assertTrue(candidate.isPresent());
+        assertTrue(candidate.get().reasons().contains(MeetingFollowUpPolicy.OVERDUE));
+    }
+
+    @Test
+    void flagsOverdueForDateOnlyDueDate() {
+        var fields = baseFields().put(KEY_FIELD, "task-date")
+            .put("任务状态", "进行中")
+            .put("截止日期", "2025-12-31");
+        assertTrue(classifier.classify(record(fields), MAPPING, KEY_FIELD,
+            Set.of(MeetingFollowUpPolicy.OVERDUE), NOW).isPresent());
+    }
+
+    @Test
+    void skipsOverdueWhenTaskAlreadyDone() {
         var fields = baseFields().put(KEY_FIELD, "task-3")
-            .put("确认状态", "confirmed")
-            .put("截止日期", NOW.minusSeconds(3600).toEpochMilli())
-            .put("执行状态", "已完成");
+            .put("任务状态", "已完成")
+            .put("截止日期", NOW.minusSeconds(3600).toEpochMilli());
         assertTrue(classifier.classify(record(fields), MAPPING, KEY_FIELD,
             Set.of(MeetingFollowUpPolicy.OVERDUE), NOW).isEmpty());
     }
@@ -65,7 +94,7 @@ class MeetingFollowUpClassifierTest {
     @Test
     void flagsUpstreamUncoveredWithEvidence() {
         var fields = baseFields().put(KEY_FIELD, "task-4")
-            .put("确认状态", "confirmed")
+            .put("任务状态", "进行中")
             .put("上游覆盖", "未覆盖")
             .put("未覆盖上游", "T-2026-0001")
             .put("证据定位", "纪要#3");
@@ -87,7 +116,7 @@ class MeetingFollowUpClassifierTest {
         assertEquals("ou_owner_1", candidate.get().ownerSubject());
 
         // 全部条件都不满足时无候选
-        assertTrue(classifier.classify(record(baseFields().put(KEY_FIELD, "task-6").put("确认状态", "confirmed")),
+        assertTrue(classifier.classify(record(baseFields().put(KEY_FIELD, "task-6").put("任务状态", "进行中")),
             MAPPING, KEY_FIELD, MeetingFollowUpPolicy.SUPPORTED_CONDITIONS, NOW).isEmpty());
     }
 

@@ -35,4 +35,24 @@ class MeetingConfirmationStateTest {
         assertEquals("confirm", MeetingConfirmationAction.CONFIRM.value());
         assertEquals("reject", MeetingConfirmationAction.REJECT.value());
     }
+
+    @Test
+    void actionMapsToTaskStatus() {
+        assertEquals(MeetingTaskStatus.IN_PROGRESS, MeetingConfirmationAction.CONFIRM.taskStatus());
+        assertEquals(MeetingTaskStatus.NEEDS_REVISION, MeetingConfirmationAction.REVISE.taskStatus());
+        assertEquals(MeetingTaskStatus.REJECTED, MeetingConfirmationAction.REJECT.taskStatus());
+    }
+
+    @Test
+    void taskStatusJudgesDoneAndUnconfirmed() {
+        assertTrue(MeetingTaskStatus.isDone("已完成"));
+        assertTrue(MeetingTaskStatus.isDone("completed"));
+        assertFalse(MeetingTaskStatus.isDone("进行中"));
+        assertTrue(MeetingTaskStatus.isUnconfirmed(null));
+        assertTrue(MeetingTaskStatus.isUnconfirmed(""));
+        assertTrue(MeetingTaskStatus.isUnconfirmed("待确认"));
+        assertFalse(MeetingTaskStatus.isUnconfirmed("进行中"));
+        assertEquals("进行中", MeetingTaskStatus.IN_PROGRESS.label());
+        assertEquals(MeetingTaskStatus.COMPLETED, MeetingTaskStatus.of("已完成"));
+    }
 }

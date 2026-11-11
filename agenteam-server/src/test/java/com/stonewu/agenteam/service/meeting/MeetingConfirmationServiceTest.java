@@ -39,7 +39,7 @@ class MeetingConfirmationServiceTest {
         when(store.find("ent", "binding", "task-1")).thenReturn(pendingRow("owner-A", 1L, "msg-1", null));
 
         var failure = assertThrows(ApiException.class, () -> service.answer("ent", "binding", "task-1", 1L, "msg-1",
-            MeetingConfirmationAction.CONFIRM, "同意", actor("owner-B"), "ou_other", "evt-1"));
+            MeetingConfirmationAction.CONFIRM, "同意", actor("owner-B"), "evt-1"));
         assertEquals("MEETING_CONFIRM_OWNER_REQUIRED", failure.code());
         assertEquals(HttpStatus.FORBIDDEN, failure.getStatusCode());
         verify(store, never()).answer(anyString(), anyString(), anyString(), anyLong(), any(), any(), any(), any());
@@ -51,7 +51,7 @@ class MeetingConfirmationServiceTest {
         when(store.find("ent", "binding", "task-1")).thenReturn(pendingRow("owner-A", 2L, "msg-1", null));
 
         var failure = assertThrows(ApiException.class, () -> service.answer("ent", "binding", "task-1", 1L, "msg-1",
-            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "ou_owner", "evt-1"));
+            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "evt-1"));
         assertEquals("MEETING_CONFIRM_STALE", failure.code());
         assertEquals(HttpStatus.CONFLICT, failure.getStatusCode());
     }
@@ -62,7 +62,7 @@ class MeetingConfirmationServiceTest {
         when(store.find("ent", "binding", "task-1")).thenReturn(pendingRow("owner-A", 1L, "msg-1", null));
 
         var failure = assertThrows(ApiException.class, () -> service.answer("ent", "binding", "task-1", 1L, "msg-other",
-            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "ou_owner", "evt-1"));
+            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "evt-1"));
         assertEquals("MEETING_CONFIRM_STALE", failure.code());
     }
 
@@ -72,7 +72,7 @@ class MeetingConfirmationServiceTest {
         when(store.find("ent", "binding", "task-1")).thenReturn(pendingRow("owner-A", 1L, "msg-1", "evt-1"));
 
         var result = service.answer("ent", "binding", "task-1", 1L, "msg-1",
-            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "ou_owner", "evt-1");
+            MeetingConfirmationAction.CONFIRM, null, actor("owner-A"), "evt-1");
         assertEquals("info", result.at("/toast/type").asText());
         assertEquals("此操作已处理。", result.at("/toast/content").asText());
         verify(store, never()).answer(anyString(), anyString(), anyString(), anyLong(), any(), any(), any(), any());
@@ -86,7 +86,7 @@ class MeetingConfirmationServiceTest {
             eq("同意"), eq("evt-1"), any(Instant.class))).thenReturn(true);
 
         var result = service.answer("ent", "binding", "task-1", 1L, "msg-1",
-            MeetingConfirmationAction.CONFIRM, "同意", actor("owner-A"), "ou_owner", "evt-1");
+            MeetingConfirmationAction.CONFIRM, "同意", actor("owner-A"), "evt-1");
 
         assertEquals("success", result.at("/toast/type").asText());
         assertEquals("已确认接受。", result.at("/toast/content").asText());
@@ -95,10 +95,7 @@ class MeetingConfirmationServiceTest {
         ArgumentCaptor<Map<String, Object>> fields = ArgumentCaptor.forClass(Map.class);
         verify(commands).publish(eq("ent"), eq("binding"), eq("task-1"), eq("confirm:evt-1"), fields.capture());
         var captured = fields.getValue();
-        assertEquals("confirmed", captured.get("confirm_status"));
-        assertEquals("同意", captured.get("confirm_comment"));
-        assertEquals("ou_owner", captured.get("confirm_user"));
-        assertEquals(CLOCK.instant().toEpochMilli(), captured.get("confirm_time"));
+        assertEquals("进行中", captured.get("task_status"));
     }
 
     private MeetingConfirmationRow pendingRow(String ownerUserId, long taskVersion, String cardMessageId, String lastEventId) {

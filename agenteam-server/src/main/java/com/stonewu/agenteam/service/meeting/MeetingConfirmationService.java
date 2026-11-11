@@ -78,7 +78,7 @@ public class MeetingConfirmationService {
     @Transactional
     public JsonNode answer(String enterpriseId, String bindingId, String businessKey, long taskVersion,
                            String cardMessageId, MeetingConfirmationAction action, String comment,
-                           AuthContext actor, String operatorOpenId, String eventId) {
+                           AuthContext actor, String eventId) {
         enterprises.lockEnterprise(enterpriseId).orElseThrow();
         var row = store.find(enterpriseId, bindingId, businessKey);
         if (row == null) {
@@ -109,12 +109,7 @@ public class MeetingConfirmationService {
             throw conflict();
         }
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put(MeetingFieldCode.CONFIRM_STATUS.code(), action.state().value());
-        if (comment != null && !comment.isBlank()) {
-            fields.put(MeetingFieldCode.CONFIRM_COMMENT.code(), comment);
-        }
-        fields.put(MeetingFieldCode.CONFIRM_USER.code(), operatorOpenId);
-        fields.put(MeetingFieldCode.CONFIRM_TIME.code(), now.toEpochMilli());
+        fields.put(MeetingFieldCode.TASK_STATUS.code(), action.taskStatus().label());
         commands.publish(enterpriseId, bindingId, businessKey, "confirm:" + eventId, fields);
         return toast("success", messageFor(action));
     }

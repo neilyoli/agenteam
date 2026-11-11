@@ -138,8 +138,8 @@ class MeetingFollowUpTransactionsTest {
         row.setAppToken("app-1");
         row.setTableId("tbl-1");
         row.setBusinessType("task");
-        row.setKeyField("任务唯一键");
-        row.setFieldMappingJson("{\"title\":\"标题\",\"owner\":\"负责人\",\"confirm_status\":\"确认状态\"}");
+        row.setKeyField("任务ID");
+        row.setFieldMappingJson("{\"title\":\"标题\",\"owner\":\"负责人\",\"task_status\":\"任务状态\"}");
         row.setStatus("enabled");
         return row;
     }
@@ -170,7 +170,7 @@ class MeetingFollowUpTransactionsTest {
     private MeetingFollowUpCandidate candidate() {
         ObjectNode evidence = JsonNodeFactory.instance.objectNode();
         evidence.put("task_key", "task-1");
-        evidence.put("confirm_status", "待确认");
+        evidence.put("task_status", "待确认");
         return new MeetingFollowUpCandidate("task-1", "标题", "ou_owner", List.of("unconfirmed"), evidence);
     }
 

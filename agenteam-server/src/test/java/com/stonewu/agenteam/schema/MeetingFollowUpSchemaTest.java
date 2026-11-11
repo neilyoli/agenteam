@@ -200,8 +200,8 @@ class MeetingFollowUpSchemaTest {
         row.setAppToken("bascn" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         row.setTableId("tbl" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         row.setBusinessType(businessType);
-        row.setKeyField("任务唯一键");
-        row.setFieldMappingJson("{\"task_key\":\"任务唯一键\"}");
+        row.setKeyField("任务ID");
+        row.setFieldMappingJson("{\"task_key\":\"任务ID\"}");
         row.setStatus("enabled");
         row.setSchemaRevision("0".repeat(64));
         row.setOwnerUserId(owner);

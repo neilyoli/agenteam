@@ -31,7 +31,7 @@ class MeetingBitableFieldValidatorTest {
 
     @Test
     void rejectsManualFieldAsWritableTarget() {
-        assertMappingInvalid(Map.of("meeting_key", "k", "confirm_status", "确认状态"));
+        assertMappingInvalid(Map.of("meeting_key", "k", "task_status", "任务状态"));
     }
 
     @Test

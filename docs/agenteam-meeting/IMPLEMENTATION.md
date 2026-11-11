@@ -15,7 +15,7 @@
 | M4 | 飞书同步（Binding/Schema/白名单/Outbox） | 完成 | 见 M4 记录 |
 | M5 | 确认闭环（卡片/回调） | 完成 | d9cfc25 |
 | M6 | 持续督办（Schedule action） | 完成 | 见 M6 记录 |
-| M7 | 验收发布 | 未开始 | — |
+| M7 | 验收发布 | 进行中 | 见 M7 记录 |
 
 ## M0 记录
 
@@ -119,8 +119,9 @@
     动作；校验机器人状态/凭据修订/绑定归属，再经 `ChatIdentityService` 解析操作者身份。
   - `MeetingConfirmationService.answer`：企业锁 + 事件去重（`last_event_id`）+ 状态/版本/卡片消息编号/
     负责人身份四重校验，原子回答后经独立命令服务把确认字段写入投递箱。
-  - `MeetingConfirmationCommandService`：仅允许人工确认字段（`confirm_status`/`confirm_comment`/
-    `confirm_user`/`confirm_time`），映射为飞书字段后入版本化投递箱，普通 AI 提议字段不可冒充确认。
+  - `MeetingConfirmationCommandService`：仅允许人工确认字段 `task_status`（任务状态，飞书唯一事实来源），
+    映射为飞书字段后入版本化投递箱，普通 AI 提议字段不可冒充确认；审计（评论/操作人/时间）留 MySQL
+    `meeting_confirmation`。
   - `MeetingConfirmationStore`/`MeetingConfirmationMapper`：`beginRound`（重新确认重置版本/负责人/状态）、
     `recordCard`（回填平台消息编号）、`answer`（状态+版本+事件去重原子更新）。
 - 验证：
@@ -165,6 +166,36 @@
 - 剩余：同步完成后自动发卡、重新确认触发新 Run 的宿主桥接（M5 遗留）继续顺延 M7；
   飞书真实字段值形状（日期毫秒/人员对象/单选标记）与工作时段时区需 M7 真实租户 POC 校准；
   真实端到端催办投递无凭据，未以 mock 冒充真实验收。
+
+## M7 记录
+
+- 校准（进行中）：按用户“直接联调”要求，从 magic-ai 真实源码校准飞书 Base 字段、值形状与事件类型，
+  结论见 [M7-CALIBRATION.md](M7-CALIBRATION.md)。
+  - 事件类型：`meeting.ended` / `meeting.all_meeting.ended` / `card.action.trigger` /
+    `im.message.receive_v1`，统一过滤 `meetingSource==1`。
+  - 任务宽表（`tasks`）真实字段：会议ID、待办、任务描述、任务确认人信息/任务确认人、任务负责人信息/
+    任务负责人、会议名称、会议时间、截止时间、验收标准。
+  - 关键差异：原无独立“任务唯一键”列（复合键 `会议ID+待办`），已确认企业侧新增文本列「任务ID」
+    承载稳定 `task_key`；日期为文本 `yyyy-MM-dd HH:mm:ss`（非毫秒）；人员为 open_id 数组；
+    `上游任务覆盖状态` 在会议主表（Select：待检查/无需上游）。
+  - 状态字段收敛（字段能少则少）：合并「确认状态」「执行状态」为单「任务状态」字段
+    （`task_status`，单选：待确认/进行中/已完成/需调整/已拒绝），M5 确认动作写它、M6 督办读它；
+    确认评论/操作人/时间不再写 Base，审计留 MySQL `meeting_confirmation`。
+  - 代码校准：`MeetingFollowUpClassifier.date()` 支持文本日期（Asia/Shanghai）解析；
+    `MeetingFollowUpClassifierTest` 由 5 项增至 8 项；状态字段收敛相关 6 个生产类 + 8 个测试类
+    同步更新。全量 `mvn -o clean test -Dtest=Meeting*Test` → **62 项全通过**（14 个测试类，
+    BUILD SUCCESS，见 [M7-ACCEPTANCE.md](M7-ACCEPTANCE.md) 测试基线）。
+  - 交付文档：[RUNBOOK.md](RUNBOOK.md)（运行手册：部署前提/飞书应用/绑定订阅/Skill/测试会议/
+    看板/失败队列/停用恢复）与 [M7-ACCEPTANCE.md](M7-ACCEPTANCE.md)（A01–A19 验收矩阵 +
+    未执行项清单）。`meeting-follow-up` Skill 已同步「任务状态」收敛。
+- 剩余（验收发布项，须在真实租户闭环，不得以 mock 冒充）：
+  - 真实飞书链路：绑定真实 Base/表并核对 schema、写回/催办/回调端到端投递（A05/A08/A10/A13/A19）。
+  - 故障恢复：进程重启后 Outbox/扫描租约恢复、重复回调去重、版本不匹配停用。
+  - 权限：企业管理员绑定/对账权限、负责人身份校验、卡片回调可信性。
+  - 升级/卸载：插件版本不匹配 ignored、旧绑定停用、卸载后运行手册。
+- 已知待决策差距：任务宽表「任务状态」已收敛为单字段（待企业侧按单选「待确认/进行中/已完成/需调整/
+  已拒绝」建列并映射 `task_status`）；M6「上游未覆盖」条件需企业侧在任务宽表另配「上游覆盖」单选
+  （已覆盖/未覆盖）；均不在此阶段擅自扩展，待真实租户联调确认后一并处理。
 
 ## 恢复入口
 

@@ -2,8 +2,20 @@
 -- 长期连接、事件路由与重试由宿主承担；插件只提供会议分析与业务校验。
 
 -- 后台任务类型纳入会议事件队列（仅扩展允许值，不改变既有任务语义）。
-ALTER TABLE background_job DROP CHECK ck_background_job_1;
-ALTER TABLE background_job ADD CONSTRAINT ck_background_job_1 CHECK (kind IN ('run','document_parse','file_scan','mail','notification','event_publish','export','cleanup','meeting_event'));
+-- 迁移中途失败时约束可能已被删除，按存在性保护以便修复后重跑。
+SET @ck_background_job_1_exists = (
+  SELECT COUNT(*) FROM information_schema.table_constraints
+  WHERE constraint_schema = DATABASE()
+    AND table_name = 'background_job'
+    AND constraint_name = 'ck_background_job_1'
+    AND constraint_type = 'CHECK'
+);
+SET @drop_ck_background_job_1 = IF(@ck_background_job_1_exists > 0,
+  'ALTER TABLE background_job DROP CHECK ck_background_job_1', 'DO 0');
+PREPARE drop_ck_background_job_1_stmt FROM @drop_ck_background_job_1;
+EXECUTE drop_ck_background_job_1_stmt;
+DEALLOCATE PREPARE drop_ck_background_job_1_stmt;
+ALTER TABLE background_job ADD CONSTRAINT ck_background_job_1 CHECK (kind IN ('run','document_parse','file_scan','mail','notification','event_publish','export','cleanup','scheduled_action','channel_delivery','conversation_title','meeting_event'));
 
 CREATE TABLE meeting_subscription (
   `id` varchar(100) NOT NULL,

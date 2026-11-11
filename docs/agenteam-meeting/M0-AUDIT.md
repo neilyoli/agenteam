@@ -66,7 +66,7 @@
 | --- | --- | --- |
 | 系统事实 | meeting_key/meeting_id/时间/主持人/来源链接/来源证据 | 仅可信来源；AI 不覆盖 |
 | AI 建议 | task_title/description/classification/evidence/ai_suggested_owner/ai_suggested_due_date | 按分析版本更新并审计 |
-| 人工确认 | owner/due_date/collaborators/confirmation_status/owner_feedback/execution_status/completion_evidence | 确认后由人维护；AI 重分析不得覆盖，冲突转复核 |
+| 人工确认 | owner/due_date/collaborators/task_status | 确认后由人维护；AI 重分析不得覆盖，冲突转复核（`task_status` 为确认+执行合并状态；确认意见/完成证据留 MySQL 台账，不落 Base） |
 | 计算/只读 | 公式、Lookup、AutoNumber | 同步器不写入 |
 
 稳定身份：`meeting_key = source_app_id + meeting_id`；`task_key` 在 meeting_key 命名空间内含首次分配的稳定 `task_id`，不能用标题/负责人生成。重跑先读已有任务并匹配证据/语义，确认新事项才分配新 task_id。
