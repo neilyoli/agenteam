@@ -194,6 +194,15 @@
     `BuiltinSkillResourceServiceTest` (3)；全量 `Meeting*Test + BuiltinSkillResourceServiceTest` →
     **114 项全通过**。
   - 剩余：M7-E 验收矩阵 + 真实飞书 E2E（无凭据，未以 mock 冒充）。
+- M7-E（收尾）：验收矩阵刷新与最终汇总——真实飞书 E2E 未执行，明确记录为未执行项。
+  - 刷新 [M7-ACCEPTANCE.md](M7-ACCEPTANCE.md)：测试基线 62 → **114 项**（`Meeting*Test,
+    BuiltinSkillResourceServiceTest`），逐条更新 A01–A19 证据（稳定任务身份替换内容哈希、资料
+    等待、事件过滤、内置技能、确认卡片版本栅栏）；新增 §3「M7-D 增量覆盖」；A19 及故障恢复/
+    权限/升级演练仍列 ❌ 未执行，不以 mock 冒充。
+  - 新增 [M7-FINAL.md](M7-FINAL.md)：需求追踪（MEETING-ADR-001..010 → 实现）、架构合规审计
+    （对照桥接审计 §6「当前不应做的事」逐条给出合规证据）、目标调用链闭环状态与发布结论。
+  - 结论：M7-A..D 代码与 114 项测试完成；真实飞书租户 E2E 未执行，**不宣称可生产发布**；交付
+    单 PR 供审核，不自动合并、不建 Tag/Release、不改 main。
 - M7-C（完成）：负责人确认完整闭环——任务同步成功后自动、独立、可恢复地投递确认卡片。
   - 迁移 `V0.6.0.6`：`meeting_confirmation` 新增卡片投递列（card_status pending/sending/sent/failed/
     blocked/unknown/unresolved、标题/描述快照、尝试计数与上限、next_attempt_at、claim_token+lease_until
