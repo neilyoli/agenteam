@@ -169,6 +169,27 @@
 
 ## M7 记录
 
+- M7-B（完成）：稳定任务身份与跨会议关联，替换 M3 标题+负责人哈希算法。
+  - 迁移 `V0.6.0.5`：`meeting_task_identity`（宿主分配的稳定身份：task_key 随机分配、标题/负责人仅作
+    展示快照、title_normalized 供候选匹配、status active/merged/review、来源计数）与 `meeting_task_source`
+    （任务↔会议来源关系 + 证据快照，`UNIQUE(enterprise, task_key, meeting_id)`）。两表只保存技术身份、
+    关系与审计，任务业务状态仍以飞书为唯一事实来源。
+  - `MeetingTaskIdentityService.resolve`：existingTaskKey 显式引用 → 复用身份（键永不变，快照刷新）；
+    无引用且同规范化标题+负责人已有活动身份 → `MEETING_TASK_DUPLICATE_CANDIDATE` 列出候选，要求显式
+    关联或改写更具体标题，绝不相似度自动合并；否则分配 `T-<uuid>` 新身份。同一会议重复提及保持一条
+    来源并更新证据，跨会议提及追加来源。`requireUpstreamReferences` 强制上游引用指向真实活动身份。
+  - `meeting_task_publish` 新增 `existingTaskKey` 参数；`MeetingTaskPublicationService` 发布事务内完成
+    身份解析与来源记录（与 Outbox 命令同事务）。
+  - 新增只读工具 `meeting_task_search`（按任务编号/标题关键词/会议/负责人检索，可选 includeLiveStatus
+    实时读飞书任务宽表最新状态，读取失败降级 unavailable 不中断检索）与 `meeting_upstream_search`
+    （检索当前会议之外的上游候选，只保留确有外部来源的任务；未检索到如实返回空，不推断为未覆盖），
+    由 `MeetingTaskQueryService` + `MeetingTaskSearchToolHandler` 承载；`MeetingBitableClient` 新增
+    `findRecordFields` 单记录全字段读取。
+  - 验证：`MeetingTaskIdentityServiceTest`(6)/`MeetingTaskQueryServiceTest`(4)/
+    `MeetingTaskIdentitySchemaTest`(2，Docker：唯一键/CHECK/外键/来源唯一)；发布测试更新为身份服务契约；
+    全量 Meeting*Test + BuiltinPluginSelectionApiTest → **98 项全通过**（工具数 50→53）。
+  - 已知限制：并发发布同标题+负责人任务可能各建一个身份（无数据库唯一约束阻止），依赖发布前的候选
+    检查与人工合并（status=merged）兜底；真实租户联调时观察是否需要额外护栏。
 - M7-A（完成）：Agent 到宿主的任务发布闭环，实施合同见 [M7-A-IMPLEMENTATION.md](M7-A-IMPLEMENTATION.md)。
   - 宿主内置插件 `meeting_management`（`PlatformBuiltinPlugins` 注册，图标 Lightbulb/teal）+ 唯一写工具
     `meeting_task_publish`（`MeetingManagementToolDefinitions`，严格 JSON Schema、additionalProperties=false、

@@ -99,7 +99,7 @@ class BuiltinPluginSelectionApiTest extends ExecutionApiTestSupport {
             toolCount += published.size();
             assertEquals(resource.config().path("enabledToolNames").size(), published.size());
         }
-        assertEquals(51, toolCount);
+        assertEquals(53, toolCount);
         assertEquals(Set.of("platform_basics", "todo_management", "schedule_management", "web_read", "group_collaboration", "workflow_management", "meeting_management"), builtinCodes);
         assertFalse(response.toString().contains("inputSchema"));
     }

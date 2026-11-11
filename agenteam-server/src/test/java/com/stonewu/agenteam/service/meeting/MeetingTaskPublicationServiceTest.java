@@ -56,7 +56,7 @@ class MeetingTaskPublicationServiceTest {
     @Test
     void queuesValidTaskForMeetingEventRun() {
         prepareAuthorization();
-        when(taskKeys.assignKey("落地对接方案", "ou_owner")).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
         when(commands.bindingMapping(any())).thenReturn(fullMapping());
         when(commands.publish(eq("ent"), any())).thenReturn(
             new MeetingSyncCommandResult("task-binding", "T-stable-key", "op-1"));
@@ -83,7 +83,7 @@ class MeetingTaskPublicationServiceTest {
     @Test
     void dropsUnmappedOptionalFieldsButRequiresUniqueKeyAndTitle() {
         prepareAuthorization();
-        when(taskKeys.assignKey(any(), any())).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
         // 只有唯一键映射，标题未映射：必须拒绝并提示修复绑定。
         when(commands.bindingMapping(any())).thenReturn(Map.of("task_key", "任务ID"));
 
@@ -159,7 +159,7 @@ class MeetingTaskPublicationServiceTest {
     void supportsInteractiveRunWithUserApprovalPath() {
         when(bindings.selectOne(any())).thenReturn(taskBinding());
         when(channelIdentity.find("ent", "integ-1", "feishu_open_id", "ou_owner")).thenReturn(Optional.of(owner()));
-        when(taskKeys.assignKey(any(), any())).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
         when(commands.bindingMapping(any())).thenReturn(fullMapping());
         when(commands.publish(eq("ent"), any())).thenReturn(
             new MeetingSyncCommandResult("task-binding", "T-stable-key", "op-1"));

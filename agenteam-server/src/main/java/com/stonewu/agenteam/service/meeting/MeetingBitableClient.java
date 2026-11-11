@@ -126,6 +126,47 @@ public class MeetingBitableClient {
         }
     }
 
+    /** 按唯一键等值查询单条记录并返回全部字段；不存在返回 null，重复唯一键拒绝猜测。 */
+    public JsonNode findRecordFields(String connection, String token, String appToken, String tableId,
+                                     String keyField, String keyValue) {
+        try {
+            ObjectNode condition = json.createObjectNode().put("field_name", keyField).put("operator", "is");
+            condition.putArray("value").add(keyValue);
+            ObjectNode filter = json.createObjectNode().put("conjunction", "and");
+            filter.putArray("conditions").add(condition);
+            ObjectNode body = json.createObjectNode();
+            body.set("filter", filter);
+            body.put("page_size", 2);
+            JsonNode data = requireSuccess(http.post(connection,
+                endpoints.feishu(BITABLE + appToken + "/tables/" + tableId + "/records/search"), Map.of(), body, token))
+                .path("data");
+            if (data.path("has_more").asBoolean(false)
+                || data.path("total").isIntegralNumber() && data.path("total").asLong() > 1) {
+                throw new MeetingBitableException("目标表存在重复唯一键，拒绝选择任意记录更新", null, null, false);
+            }
+            JsonNode items = data.path("items");
+            if (!items.isArray() || items.size() == 0) {
+                return null;
+            }
+            if (items.size() > 1) {
+                throw new MeetingBitableException("目标表存在重复唯一键，拒绝选择任意记录更新", null, null, false);
+            }
+            var record = items.get(0);
+            String recordId = record.path("record_id").asText(null);
+            var fields = record.path("fields");
+            if (recordId == null || fields == null || !fields.isObject()) {
+                return null;
+            }
+            var result = (ObjectNode) fields.deepCopy();
+            result.put("__record_id__", recordId);
+            return result;
+        } catch (MeetingBitableException failure) {
+            throw failure;
+        } catch (ChannelProviderException failure) {
+            throw new MeetingBitableException("飞书记录查询请求失败", true, failure);
+        }
+    }
+
     public String createRecord(String connection, String token, String appToken, String tableId,
                                String clientToken, Map<String, Object> fields) {
         try {

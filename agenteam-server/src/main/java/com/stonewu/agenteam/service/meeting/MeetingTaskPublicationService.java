@@ -101,9 +101,13 @@ public class MeetingTaskPublicationService {
         }
         LocalDate dueDate = parseDueDate(request.dueDate());
         validateEvidence(request.evidence());
+        taskKeys.requireUpstreamReferences(run.enterpriseId(), request.upstreamTaskRefs());
 
-        resolveOwner(run.enterpriseId(), integrationId, request.ownerOpenId());
-        String taskKey = taskKeys.assignKey(request.taskTitle(), request.ownerOpenId());
+        var owner = resolveOwner(run.enterpriseId(), integrationId, request.ownerOpenId());
+        String taskKey = taskKeys.resolve(run.enterpriseId(), taskBinding.getId(),
+            new MeetingTaskIdentityService.IdentityRequest(request.existingTaskKey(), request.taskTitle(),
+                request.ownerOpenId(), owner.getUserId(), request.ownerName(), request.meetingId(),
+                request.meetingTitle(), evidenceSnapshot(request.evidence()), run.id(), context.operationId()));
 
         Map<String, Object> fields = buildFields(taskBinding, taskKey, request, dueDate);
         var result = commands.publish(run.enterpriseId(),
@@ -145,20 +149,36 @@ public class MeetingTaskPublicationService {
         return new Request(text(args, "meetingId"), text(args, "meetingTitle"), text(args, "meetingTime"),
             text(args, "taskTitle"), text(args, "description"), text(args, "classification"),
             text(args, "deliverable"), text(args, "acceptanceCriteria"), text(args, "ownerOpenId"),
-            text(args, "ownerName"), text(args, "dueDate"), List.copyOf(evidence), Set.copyOf(participants),
-            text(args, "departmentCode"), List.copyOf(collaborators), text(args, "priority"),
-            text(args, "riskLevel"), List.copyOf(upstream), text(args, "sourceMaterial"));
+            text(args, "ownerName"), text(args, "dueDate"), text(args, "existingTaskKey"), List.copyOf(evidence),
+            Set.copyOf(participants), text(args, "departmentCode"), List.copyOf(collaborators),
+            text(args, "priority"), text(args, "riskLevel"), List.copyOf(upstream), text(args, "sourceMaterial"));
     }
 
     private record Request(String meetingId, String meetingTitle, String meetingTime, String taskTitle,
                            String description, String classification, String deliverable,
                            String acceptanceCriteria, String ownerOpenId, String ownerName, String dueDate,
-                           List<EvidenceItem> evidence, Set<String> participantOpenIds, String departmentCode,
-                           List<String> collaboratorOpenIds, String priority, String riskLevel,
-                           List<String> upstreamTaskRefs, String sourceMaterial) {
+                           String existingTaskKey, List<EvidenceItem> evidence, Set<String> participantOpenIds,
+                           String departmentCode, List<String> collaboratorOpenIds, String priority,
+                           String riskLevel, List<String> upstreamTaskRefs, String sourceMaterial) {
     }
 
     private record EvidenceItem(String sourceType, String sourceId, String anchor, String quote) {
+    }
+
+    /** 证据精简快照，保存到任务来源记录用于跨会议审计。 */
+    private List<Map<String, String>> evidenceSnapshot(List<EvidenceItem> evidence) {
+        return evidence.stream().map(item -> {
+            Map<String, String> snapshot = new LinkedHashMap<>();
+            snapshot.put("sourceType", item.sourceType());
+            if (item.sourceId() != null) {
+                snapshot.put("sourceId", item.sourceId());
+            }
+            snapshot.put("anchor", item.anchor());
+            if (item.quote() != null) {
+                snapshot.put("quote", item.quote());
+            }
+            return snapshot;
+        }).toList();
     }
 
     private static String text(JsonNode node, String field) {
