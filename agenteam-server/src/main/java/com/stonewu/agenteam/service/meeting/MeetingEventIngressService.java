@@ -25,17 +25,19 @@ public class MeetingEventIngressService {
     private final MeetingEventNormalizer normalizer;
     private final MeetingSubscriptionMapper subscriptions;
     private final MeetingEventMapper events;
+    private final MeetingEventStore store;
     private final EnterpriseMapper enterprises;
     private final BackgroundJobMapper jobs;
     private final ResourceJson json;
     private final Clock clock;
 
     public MeetingEventIngressService(MeetingEventNormalizer normalizer, MeetingSubscriptionMapper subscriptions,
-                                      MeetingEventMapper events, EnterpriseMapper enterprises, BackgroundJobMapper jobs,
-                                      ResourceJson json, Clock clock) {
+                                      MeetingEventMapper events, MeetingEventStore store, EnterpriseMapper enterprises,
+                                      BackgroundJobMapper jobs, ResourceJson json, Clock clock) {
         this.normalizer = normalizer;
         this.subscriptions = subscriptions;
         this.events = events;
+        this.store = store;
         this.enterprises = enterprises;
         this.jobs = jobs;
         this.json = json;
@@ -51,6 +53,11 @@ public class MeetingEventIngressService {
         }
         var event = normalized.get();
         enterprises.lockEnterprise(enterprise).orElseThrow();
+        // 资料就绪事件（minutes.* 携带 minute_token）快进等待中的会议事件，不单独落新收件箱。
+        if (event.minuteToken() != null && !event.minuteToken().isBlank() && event.meetingId() != null
+            && fastForward(enterprise, app.id(), event.meetingId(), event.minuteToken())) {
+            return true;
+        }
         if (!subscribed(enterprise, app.id(), event.eventType())) {
             return true;
         }
@@ -78,8 +85,20 @@ public class MeetingEventIngressService {
         jobs.enqueue(jobId, enterprise, null, "meeting_event",
             "meeting-event:" + enterprise + ":" + app.id() + ":" + event.eventId(),
             json.write(json.tree(Map.of("meetingEventId", row.getId()))), now);
+        jobs.setAttemptLimit(jobId, MeetingEventTransactions.ARTIFACT_WAIT_MAX_ATTEMPTS);
         row.setJobId(jobId);
         events.insert(row);
+        return true;
+    }
+
+    /** 把资料就绪回填到等待中的会议事件并把其原任务置为可领取，实现资料就绪后自动续跑。 */
+    private boolean fastForward(String enterprise, String integrationId, String meetingId, String minuteToken) {
+        var waiting = store.waitingForMeeting(enterprise, integrationId, meetingId);
+        if (waiting == null || waiting.getJobId() == null) {
+            return false;
+        }
+        store.requeue(waiting, minuteToken);
+        jobs.release(waiting.getJobId(), clock.instant());
         return true;
     }
 

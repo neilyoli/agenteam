@@ -107,6 +107,33 @@ class MeetingEventSchemaTest {
         }
     }
 
+    @Test
+    void meetingEventAcceptsWaitingStatusAndPersistsWaitUntil() throws Exception {
+        try (var database = new IsolatedDatabase()) {
+            database.initialize();
+            var access = database.databaseAccess();
+            String owner = user(access);
+            String enterprise = enterprise(access, owner);
+            member(access, enterprise, owner);
+            String connection = connection(access, enterprise, owner);
+
+            var waiting = event(enterprise, connection, "evt-waiting");
+            waiting.setStatus("waiting");
+            waiting.setReasonCode("MEETING_ARTIFACT_PENDING");
+            waiting.setWaitUntil(Instant.parse("2026-01-01T00:01:00Z"));
+            access.mapper(MeetingEventMapper.class).insert(waiting);
+
+            var loaded = access.mapper(MeetingEventMapper.class).selectById(waiting.getId());
+            assertEquals("waiting", loaded.getStatus());
+            assertEquals(Instant.parse("2026-01-01T00:01:00Z"), loaded.getWaitUntil());
+
+            var invalid = event(enterprise, connection, "evt-bogus");
+            invalid.setStatus("bogus");
+            assertThrows(DataAccessException.class,
+                () -> access.mapper(MeetingEventMapper.class).insert(invalid));
+        }
+    }
+
     private MeetingEventRow event(String enterprise, String connection, String eventId) {
         var row = new MeetingEventRow();
         row.setId(UUID.randomUUID().toString());

@@ -65,4 +65,7 @@ public class MeetingEventRow implements EnterpriseScopedRecord {
 
     @TableField("error_code")
     private String errorCode;
+
+    @TableField("wait_until")
+    private Instant waitUntil;
 }

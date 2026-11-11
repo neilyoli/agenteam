@@ -6,10 +6,12 @@ import com.stonewu.plugin.api.JavaPluginContext;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
@@ -144,7 +146,11 @@ public final class MeetingApiClient {
         return new MeetingApiException(MeetingApiException.Kind.UNKNOWN, msg);
     }
 
-    private static String encode(String value) {
-        return value == null ? "" : value;
+    /** 路径段编码：会议编号/妙记编号为不透明令牌，仍需对空格、斜杠等特殊字符做百分号编码，避免破坏请求。 */
+    static String encode(String value) {
+        if (value == null) {
+            return "";
+        }
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

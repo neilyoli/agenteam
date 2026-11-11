@@ -22,7 +22,7 @@ class MeetingEventNormalizerTest {
     void recognizesPrefixedMeetingEventAndExtractsIdentifiers() throws Exception {
         var envelope = json.readTree("""
             {"header":{"event_type":"meeting.advanced_meeting_started","event_id":"evt-1","app_id":"cli_abc","tenant_key":"tenant-1"},
-             "event":{"meeting":{"meeting_id":"meeting-1"},"minutes_token":"minute-1"}}
+             "event":{"meeting":{"meeting_id":"meeting-1","meeting_source":1},"minutes_token":"minute-1"}}
             """);
         var result = normalizer.normalize(app, envelope, receivedAt);
         assertTrue(result.isPresent());
@@ -32,6 +32,26 @@ class MeetingEventNormalizerTest {
         assertEquals("meeting-1", event.meetingId());
         assertEquals("minute-1", event.minuteToken());
         assertEquals(receivedAt, event.receivedAt());
+    }
+
+    @Test
+    void rejectsNonCalendarMeetingSource() throws Exception {
+        var envelope = json.readTree("""
+            {"header":{"event_type":"meeting.ended","event_id":"evt-call","app_id":"cli_abc"},
+             "event":{"meeting":{"meeting_id":"meeting-3","meeting_source":2}}}
+            """);
+        assertTrue(normalizer.normalize(app, envelope, receivedAt).isEmpty());
+    }
+
+    @Test
+    void rejectsMissingEventId() throws Exception {
+        var envelope = json.readTree("""
+            {"header":{"event_type":"meeting.ended","app_id":"cli_abc"},
+             "event":{"meeting":{"meeting_id":"meeting-4","meeting_source":1}}}
+            """);
+        var failure = assertThrows(ApiException.class, () -> normalizer.normalize(app, envelope, receivedAt));
+        assertEquals(HttpStatus.BAD_REQUEST, failure.getStatusCode());
+        assertEquals("MEETING_EVENT_ID_MISSING", failure.code());
     }
 
     @Test

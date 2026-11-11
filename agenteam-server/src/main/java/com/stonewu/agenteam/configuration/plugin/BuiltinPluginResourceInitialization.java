@@ -2,6 +2,7 @@ package com.stonewu.agenteam.configuration.plugin;
 
 import com.stonewu.agenteam.mapper.plugin.BuiltinPluginResourceMapper;
 import com.stonewu.agenteam.service.plugin.BuiltinPluginResourceService;
+import com.stonewu.agenteam.service.skill.BuiltinSkillResourceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -20,10 +21,14 @@ public class BuiltinPluginResourceInitialization implements ApplicationRunner {
 
     private final BuiltinPluginResourceService resources;
 
+    private final BuiltinSkillResourceService skills;
+
     public BuiltinPluginResourceInitialization(BuiltinPluginResourceMapper selection,
-                                               BuiltinPluginResourceService resources) {
+                                               BuiltinPluginResourceService resources,
+                                               BuiltinSkillResourceService skills) {
         this.selection = selection;
         this.resources = resources;
+        this.skills = skills;
     }
 
     @Override
@@ -37,6 +42,7 @@ public class BuiltinPluginResourceInitialization implements ApplicationRunner {
             for (String enterprise : enterpriseIds) {
                 try {
                     resources.initialize(enterprise);
+                    skills.initialize(enterprise);
                 } catch (RuntimeException failure) {
                     LOG.error("初始化内置插件失败，企业编号 {}", enterprise, failure);
                     throw failure;

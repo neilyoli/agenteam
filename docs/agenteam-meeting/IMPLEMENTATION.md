@@ -169,6 +169,31 @@
 
 ## M7 记录
 
+- M7-D（完成）：事件过滤、资料等待与内置技能导入——补齐 M7 闭环的三处可靠性缺口。
+  - `MeetingEventNormalizer` 严格过滤：仅 `meetingSource == 1`（日历会议）的会议事件放行，其余来源的
+    ended 事件过滤（`event.meeting`/`event.meeting.all_meeting` 本身不携带 minute_token）；`event_id`
+    为空直接拒绝（BAD_REQUEST `MEETING_EVENT_ID_MISSING`），杜绝无身份事件入库。
+  - 资料就绪等待：迁移 `V0.6.0.7` 为 `meeting_event` 新增 `wait_until` 列并将状态 CHECK 扩展为含
+    `waiting`。`MeetingEventTransactions.submit` 对 `meeting.ended`/`meeting.all_meeting.ended` 且无
+    `minute_token` 的事件改为 `waiting` 状态 + 有界退避（`artifactWaitSeconds`：60s 起步、按次递增、封顶
+    300s，`ARTIFACT_WAIT_MAX_ATTEMPTS=6` 次后 `MEETING_ARTIFACT_TIMEOUT` 失败），不再忙等/无限重试/假成功；
+    `minutes.meeting_record_created`（携带 minute_token）到达时 `MeetingEventIngressService` 快速前推：找到
+    等待事件即 `requeue` + `jobs.release`（复位 available_at 复用同一作业，不新建 job——新建会被 job_id
+    不一致锁拒绝），资料就绪后正常创建 Run。
+  - 内置技能正式导入/发布/绑定：新增 `BuiltinSkillAdapter`/`BuiltinSkillRegistry`/
+    `BuiltinSkillResourceService`（镜像 `BuiltinPluginResourceService`），`MeetingSkills` 声明
+    `meeting-intelligence`（会议智能分析）与 `meeting-follow-up`（会议督办跟进）两技能，插件安装后随
+    `EnterpriseProvisioningService` 建企业与 `BuiltinPluginResourceInitialization` 启动补录自动导入为
+    `ResourceKind.SKILL`（source=builtin）、发布版本并按 `pluginVersionIds` 依赖绑定到 `meeting_management`
+    插件版本；幂等（版本已存在/已停用即跳过），配置仅含 `SkillConfigurationInput` 白名单字段（不夹带
+    `builtinCode`，以免 `FAIL_ON_UNKNOWN_PROPERTIES` 拒绝）。
+  - 飞书 API 编码修复：`MeetingApiClient.encode` 改用 `URLEncoder.encode(UTF_8).replace("+", "%20")`
+    正确编码路径/查询参数，此前原样返回导致中文/特殊字符参数编码错误。
+  - 验证：`MeetingEventNormalizerTest` 补充 meetingSource 过滤与 event_id 校验；`MeetingEventTransactionsTest`
+    (5)、`MeetingEventIngressServiceTest` (2)、`MeetingEventSchemaTest` 增至 waiting 状态持久化、
+    `BuiltinSkillResourceServiceTest` (3)；全量 `Meeting*Test + BuiltinSkillResourceServiceTest` →
+    **114 项全通过**。
+  - 剩余：M7-E 验收矩阵 + 真实飞书 E2E（无凭据，未以 mock 冒充）。
 - M7-C（完成）：负责人确认完整闭环——任务同步成功后自动、独立、可恢复地投递确认卡片。
   - 迁移 `V0.6.0.6`：`meeting_confirmation` 新增卡片投递列（card_status pending/sending/sent/failed/
     blocked/unknown/unresolved、标题/描述快照、尝试计数与上限、next_attempt_at、claim_token+lease_until

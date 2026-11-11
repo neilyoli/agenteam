@@ -34,6 +34,32 @@ public class MeetingEventStore {
             .eq(MeetingEventRow::getEnterpriseId, enterprise).eq(MeetingEventRow::getId, id));
     }
 
+    /** 资料就绪前落 waiting 持久等待；waitUntil 之后由后台任务退避重试或资料就绪事件恢复。 */
+    public void markWaiting(MeetingEventRow row, Instant waitUntil) {
+        row.setStatus("waiting");
+        row.setReasonCode("MEETING_ARTIFACT_PENDING");
+        row.setWaitUntil(waitUntil);
+        save(row);
+    }
+
+    /** 资料就绪事件把 minute_token 回填到等待中的会议事件并重置为 received，等待后续重新领取处理。 */
+    public void requeue(MeetingEventRow row, String minuteToken) {
+        row.setStatus("received");
+        row.setReasonCode(null);
+        row.setWaitUntil(null);
+        row.setMinuteToken(minuteToken);
+        save(row);
+    }
+
+    /** 按会议查找仍在资料等待中的收件箱记录，供资料就绪事件快进恢复。 */
+    public MeetingEventRow waitingForMeeting(String enterprise, String integrationId, String meetingId) {
+        return events.selectOne(new LambdaQueryWrapper<MeetingEventRow>()
+            .eq(MeetingEventRow::getEnterpriseId, enterprise)
+            .eq(MeetingEventRow::getIntegrationId, integrationId)
+            .eq(MeetingEventRow::getMeetingId, meetingId)
+            .eq(MeetingEventRow::getStatus, "waiting"));
+    }
+
     public void markRouted(MeetingEventRow row, String runId, String conversationId) {
         row.setStatus("routed");
         row.setRunId(runId);
@@ -59,7 +85,8 @@ public class MeetingEventStore {
             .eq(MeetingEventRow::getEnterpriseId, row.getEnterpriseId()).eq(MeetingEventRow::getId, row.getId())
             .set(MeetingEventRow::getStatus, row.getStatus()).set(MeetingEventRow::getReasonCode, row.getReasonCode())
             .set(MeetingEventRow::getRunId, row.getRunId()).set(MeetingEventRow::getConversationId, row.getConversationId())
-            .set(MeetingEventRow::getErrorCode, row.getErrorCode()).set(MeetingEventRow::getUpdatedAt, row.getUpdatedAt())
+            .set(MeetingEventRow::getErrorCode, row.getErrorCode()).set(MeetingEventRow::getMinuteToken, row.getMinuteToken())
+            .set(MeetingEventRow::getWaitUntil, row.getWaitUntil()).set(MeetingEventRow::getUpdatedAt, row.getUpdatedAt())
             .setIncrBy(MeetingEventRow::getRevision, 1));
         if (changed != 1) {
             throw new IllegalStateException("会议事件收件箱记录没有保存成功");
