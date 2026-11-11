@@ -27,11 +27,18 @@ class MeetingConfirmationServiceTest {
 
     private final MeetingConfirmationStore store = mock(MeetingConfirmationStore.class);
     private final MeetingConfirmationCommandService commands = mock(MeetingConfirmationCommandService.class);
-    private final MeetingConfirmationCardSender cards = mock(MeetingConfirmationCardSender.class);
-    private final MeetingBindingMapper bindings = mock(MeetingBindingMapper.class);
     private final EnterpriseMapper enterprises = mock(EnterpriseMapper.class);
+    private final com.stonewu.agenteam.mapper.meeting.MeetingSubscriptionMapper subscriptions =
+        mock(com.stonewu.agenteam.mapper.meeting.MeetingSubscriptionMapper.class);
+    private final com.stonewu.agenteam.mapper.execution.RunMapper runs =
+        mock(com.stonewu.agenteam.mapper.execution.RunMapper.class);
+    private final MeetingEventAccessService access = mock(MeetingEventAccessService.class);
+    private final MeetingEventPolicy eventPolicy = mock(MeetingEventPolicy.class);
+    private final com.stonewu.agenteam.service.execution.RunSubmissionService submission =
+        mock(com.stonewu.agenteam.service.execution.RunSubmissionService.class);
     private final MeetingConfirmationService service =
-        new MeetingConfirmationService(store, commands, cards, bindings, enterprises, CLOCK);
+        new MeetingConfirmationService(store, commands, enterprises, subscriptions, runs, access, eventPolicy,
+            submission, CLOCK);
 
     @Test
     void rejectsNonOwner() {

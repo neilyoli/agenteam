@@ -67,8 +67,13 @@ public class MeetingConfirmationCallbackService {
         String comment = eventNode.path("action").path("form_value").path("comment").asText(null);
         String cardMessageId = eventNode.path("context").path("open_message_id").asText();
         String eventId = event.path("header").path("event_id").asText();
-        return confirmations.answer(enterprise, bindingId, businessKey, taskVersion, cardMessageId, action, comment,
-            actor, eventId);
+        var answer = confirmations.answer(enterprise, bindingId, businessKey, taskVersion, cardMessageId, action,
+            comment, actor, eventId);
+        if (action == MeetingConfirmationAction.REVISE) {
+            // 回答已提交后再触发修订分析；失败只记录，不影响确认结果。
+            confirmations.triggerRevision(enterprise, bindingId, businessKey, comment);
+        }
+        return answer;
     }
 
     private static ApiException unavailable() {

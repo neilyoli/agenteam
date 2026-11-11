@@ -56,7 +56,7 @@ class MeetingTaskPublicationServiceTest {
     @Test
     void queuesValidTaskForMeetingEventRun() {
         prepareAuthorization();
-        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn(identity("T-stable-key", "mtg-1"));
         when(commands.bindingMapping(any())).thenReturn(fullMapping());
         when(commands.publish(eq("ent"), any())).thenReturn(
             new MeetingSyncCommandResult("task-binding", "T-stable-key", "op-1"));
@@ -83,7 +83,7 @@ class MeetingTaskPublicationServiceTest {
     @Test
     void dropsUnmappedOptionalFieldsButRequiresUniqueKeyAndTitle() {
         prepareAuthorization();
-        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn(identity("T-stable-key", "mtg-1"));
         // 只有唯一键映射，标题未映射：必须拒绝并提示修复绑定。
         when(commands.bindingMapping(any())).thenReturn(Map.of("task_key", "任务ID"));
 
@@ -159,7 +159,7 @@ class MeetingTaskPublicationServiceTest {
     void supportsInteractiveRunWithUserApprovalPath() {
         when(bindings.selectOne(any())).thenReturn(taskBinding());
         when(channelIdentity.find("ent", "integ-1", "feishu_open_id", "ou_owner")).thenReturn(Optional.of(owner()));
-        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn("T-stable-key");
+        when(taskKeys.resolve(eq("ent"), eq("task-binding"), any())).thenReturn(identity("T-stable-key", "mtg-1"));
         when(commands.bindingMapping(any())).thenReturn(fullMapping());
         when(commands.publish(eq("ent"), any())).thenReturn(
             new MeetingSyncCommandResult("task-binding", "T-stable-key", "op-1"));
@@ -255,6 +255,19 @@ class MeetingTaskPublicationServiceTest {
         extras.put("meetingTitle", "季度经营会");
         extras.set("participantOpenIds", JSON.valueToTree(java.util.List.of("ou_owner", "ou_other")));
         return extras;
+    }
+
+    private com.stonewu.agenteam.model.meeting.entity.MeetingTaskIdentityRow identity(String key, String meetingId) {
+        var row = new com.stonewu.agenteam.model.meeting.entity.MeetingTaskIdentityRow();
+        row.setId(key);
+        row.setEnterpriseId("ent");
+        row.setMeetingId(meetingId);
+        row.setTitleCurrent("落地对接方案");
+        row.setOwnerOpenId("ou_owner");
+        row.setOwnerName("张三");
+        row.setSourceCount(1);
+        row.setStatus("active");
+        return row;
     }
 
     private MeetingEventRow event() {

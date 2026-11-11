@@ -60,11 +60,13 @@ public class MeetingTaskPublicationService {
         MeetingBindingRow taskBinding;
         String integrationId;
         String fixedMeetingId = null;
-        if (MeetingRunExecutionPolicy.MODE.equals(run.mode())) {
-            // 自动路径：Run、事件、订阅、插件版本、绑定与执行身份全部重新校验。
+        boolean revision = MeetingRunExecutionPolicy.REVISION_MODE.equals(run.mode());
+        if (MeetingRunExecutionPolicy.MODE.equals(run.mode()) || revision) {
+            // 自动路径：Run、事件/修订关联、订阅、插件版本、绑定与执行身份全部重新校验。
             var authorization = runPolicy.requireAutoPublish(run);
             taskBinding = authorization.taskBinding();
-            integrationId = authorization.event().getIntegrationId();
+            integrationId = authorization.event() != null ? authorization.event().getIntegrationId()
+                : taskBinding.getIntegrationId();
             fixedMeetingId = run.executionConfig().path("meetingId").asText(null);
         } else if ("interactive".equals(run.mode())) {
             // 交互路径：写入前已经过原有工具审批；绑定仍由宿主解析，不从模型参数选择。
@@ -72,7 +74,7 @@ public class MeetingTaskPublicationService {
             integrationId = taskBinding.getIntegrationId();
         } else {
             throw new ApiException(HttpStatus.CONFLICT, "MEETING_PUBLISH_MODE_UNSUPPORTED",
-                "只有普通对话与会议事件分析可以发布会议任务。");
+                "只有普通对话、会议事件分析与任务修订可以发布会议任务。");
         }
 
         Request request = parse(args);
@@ -81,6 +83,9 @@ public class MeetingTaskPublicationService {
         }
         if (request.taskTitle() == null || request.taskTitle().isBlank()) {
             throw ApiException.invalidField("taskTitle", "任务标题不能为空。");
+        }
+        if (revision && (request.existingTaskKey() == null || request.existingTaskKey().isBlank())) {
+            throw ApiException.invalidField("existingTaskKey", "任务修订必须携带既有任务编号重新发布。");
         }
         if (MeetingRunExecutionPolicy.MODE.equals(run.mode())) {
             // 会议事件 Run 的会议编号由宿主固定的收件箱数据决定，不允许参数覆盖。
@@ -104,12 +109,16 @@ public class MeetingTaskPublicationService {
         taskKeys.requireUpstreamReferences(run.enterpriseId(), request.upstreamTaskRefs());
 
         var owner = resolveOwner(run.enterpriseId(), integrationId, request.ownerOpenId());
-        String taskKey = taskKeys.resolve(run.enterpriseId(), taskBinding.getId(),
+        var identity = taskKeys.resolve(run.enterpriseId(), taskBinding.getId(),
             new MeetingTaskIdentityService.IdentityRequest(request.existingTaskKey(), request.taskTitle(),
                 request.ownerOpenId(), owner.getUserId(), request.ownerName(), request.meetingId(),
-                request.meetingTitle(), evidenceSnapshot(request.evidence()), run.id(), context.operationId()));
+                request.meetingTitle(), evidenceSnapshot(request.evidence()), run.id(), context.operationId(),
+                !revision));
+        // 修订发布沿用任务身份固定的首次来源会议编号，不采用模型参数覆盖。
+        String taskKey = identity.getId();
+        String meetingId = revision ? identity.getMeetingId() : request.meetingId();
 
-        Map<String, Object> fields = buildFields(taskBinding, taskKey, request, dueDate);
+        Map<String, Object> fields = buildFields(taskBinding, taskKey, request, dueDate, meetingId);
         var result = commands.publish(run.enterpriseId(),
             new MeetingSyncCommand(taskBinding.getId(), fields, context.operationId(), run.id()));
         Map<String, Object> response = new LinkedHashMap<>();
@@ -229,11 +238,11 @@ public class MeetingTaskPublicationService {
      * 未映射的可选字段不进入投递 payload，唯一键与标题必须映射。
      */
     private Map<String, Object> buildFields(MeetingBindingRow binding, String taskKey, Request request,
-                                            LocalDate dueDate) {
+                                            LocalDate dueDate, String meetingId) {
         Map<String, String> mapping = commands.bindingMapping(binding);
         Map<String, Object> candidate = new LinkedHashMap<>();
         candidate.put(MeetingFieldCode.TASK_KEY.code(), taskKey);
-        candidate.put(MeetingFieldCode.MEETING_ID.code(), request.meetingId());
+        candidate.put(MeetingFieldCode.MEETING_ID.code(), meetingId);
         candidate.put(MeetingFieldCode.TITLE.code(), request.taskTitle());
         candidate.put(MeetingFieldCode.DESCRIPTION.code(), request.description());
         candidate.put(MeetingFieldCode.MEETING_TITLE.code(), request.meetingTitle());

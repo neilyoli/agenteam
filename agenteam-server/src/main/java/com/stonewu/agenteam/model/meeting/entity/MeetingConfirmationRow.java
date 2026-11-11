@@ -57,6 +57,33 @@ public class MeetingConfirmationRow implements EnterpriseScopedRecord {
     @TableField("card_command_id")
     private String cardCommandId;
 
+    @TableField("card_status")
+    private String cardStatus;
+
+    @TableField("card_title")
+    private String cardTitle;
+
+    @TableField("card_description")
+    private String cardDescription;
+
+    @TableField("card_attempt_count")
+    private Integer cardAttemptCount;
+
+    @TableField("card_max_attempts")
+    private Integer cardMaxAttempts;
+
+    @TableField("card_next_attempt_at")
+    private Instant cardNextAttemptAt;
+
+    @TableField("card_claim_token")
+    private String cardClaimToken;
+
+    @TableField("card_lease_until")
+    private Instant cardLeaseUntil;
+
+    @TableField("card_last_error")
+    private String cardLastError;
+
     @TableField("last_event_id")
     private String lastEventId;
 

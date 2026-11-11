@@ -26,7 +26,7 @@ public class MeetingConfirmationStore {
         confirmations.insert(row);
     }
 
-    /** 开始新一轮确认：不存在则插入，存在则重置版本、负责人与状态并清空上一轮记录。 */
+    /** 开始新一轮确认：不存在则插入，存在则重置版本、负责人、状态与整组卡片投递状态。 */
     @Transactional
     public void beginRound(MeetingConfirmationRow row, Instant now) {
         enterprises.lockEnterprise(row.getEnterpriseId()).orElseThrow();
@@ -36,7 +36,9 @@ public class MeetingConfirmationStore {
             return;
         }
         confirmations.beginRound(row.getEnterpriseId(), row.getBindingId(), row.getBusinessKey(),
-            row.getTaskVersion(), row.getOwnerUserId(), row.getOwnerSubject(), row.getStatus(), Timestamp.from(now));
+            row.getTaskVersion(), row.getOwnerUserId(), row.getOwnerSubject(), row.getStatus(),
+            row.getCardStatus() == null ? "unresolved" : row.getCardStatus(), row.getCardTitle(),
+            row.getCardDescription(), row.getCardCommandId(), Timestamp.from(now));
     }
 
     /** 仅当仍为待确认且版本一致时回答；返回是否成功推进。 */

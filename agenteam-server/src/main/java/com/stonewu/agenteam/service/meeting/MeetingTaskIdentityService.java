@@ -36,14 +36,15 @@ public class MeetingTaskIdentityService {
         this.clock = clock;
     }
 
-    /** 发布时的任务身份请求；evidence 为可定位证据的精简快照。 */
+    /** 发布时的任务身份请求；evidence 为可定位证据的精简快照，recordSource 表示是否记录会议来源。 */
     public record IdentityRequest(String existingTaskKey, String title, String ownerOpenId, String ownerUserId,
                                   String ownerName, String meetingId, String meetingTitle,
-                                  List<Map<String, String>> evidence, String runId, String commandId) {
+                                  List<Map<String, String>> evidence, String runId, String commandId,
+                                  boolean recordSource) {
     }
 
-    /** 已解析的任务身份：复用或新建，均返回宿主分配的稳定 task_key。 */
-    public String resolve(String enterpriseId, String bindingId, IdentityRequest request) {
+    /** 已解析的任务身份：复用或新建，均返回宿主分配的稳定身份记录。 */
+    public MeetingTaskIdentityRow resolve(String enterpriseId, String bindingId, IdentityRequest request) {
         MeetingTaskIdentityRow identity;
         if (request.existingTaskKey() != null && !request.existingTaskKey().isBlank()) {
             identity = requireExisting(enterpriseId, request.existingTaskKey());
@@ -51,8 +52,10 @@ public class MeetingTaskIdentityService {
         } else {
             identity = createNew(enterpriseId, bindingId, request);
         }
-        recordSource(enterpriseId, identity.getId(), request);
-        return identity.getId();
+        if (request.recordSource()) {
+            recordSource(enterpriseId, identity.getId(), request);
+        }
+        return identity;
     }
 
     /** 验证上游引用指向真实存在的活动任务身份。 */

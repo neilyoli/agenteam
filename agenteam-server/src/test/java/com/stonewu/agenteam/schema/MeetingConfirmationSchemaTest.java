@@ -89,7 +89,8 @@ class MeetingConfirmationSchemaTest {
             assertEquals("pending", mapper.find(enterprise, binding.getId(), "task-dup").getStatus());
 
             // 新一轮重置到版本 2 后，旧版本回调被拒绝
-            mapper.beginRound(enterprise, binding.getId(), "task-1", 2L, "owner-2", "ou_owner_2", "pending", now());
+            mapper.beginRound(enterprise, binding.getId(), "task-1", 2L, "owner-2", "ou_owner_2", "pending",
+                "pending", "会议任务确认：新任务", "请确认。", "card:task-1:2", now());
             assertEquals(0, mapper.answer(enterprise, binding.getId(), "task-1", 1L, "confirmed", "x", "evt-3", now()));
             assertEquals(1, mapper.answer(enterprise, binding.getId(), "task-1", 2L, "confirmed", "好", "evt-3", now()));
         }
@@ -112,7 +113,8 @@ class MeetingConfirmationSchemaTest {
             assertEquals("om-msg-1", recorded.getCardMessageId());
             assertEquals("cmd-1", recorded.getCardCommandId());
 
-            mapper.beginRound(enterprise, binding.getId(), "task-1", 3L, "owner-3", "ou_owner_3", "pending", now());
+            mapper.beginRound(enterprise, binding.getId(), "task-1", 3L, "owner-3", "ou_owner_3", "pending",
+                "pending", "会议任务确认：第三版", "请再次确认。", "card:task-1:3", now());
             var reset = mapper.find(enterprise, binding.getId(), "task-1");
             assertEquals(3L, reset.getTaskVersion());
             assertEquals("owner-3", reset.getOwnerUserId());
@@ -121,6 +123,55 @@ class MeetingConfirmationSchemaTest {
             assertNull(reset.getConfirmComment());
             assertNull(reset.getCardMessageId());
             assertNull(reset.getLastEventId());
+        }
+    }
+
+    @Test
+    void cardDeliveryStateMachineClaimsCompletesAndStopsUnknown() throws Exception {
+        try (var database = new IsolatedDatabase()) {
+            database.initialize();
+            var access = database.databaseAccess();
+            String owner = user(access);
+            String enterprise = enterprise(access, owner);
+            member(access, enterprise, owner);
+            var binding = binding(access, enterprise, connection(access, enterprise, owner), owner, "task");
+            var mapper = access.mapper(MeetingConfirmationMapper.class);
+
+            var row = confirmation(enterprise, binding.getId(), "task-card");
+            row.setCardStatus("pending");
+            row.setCardCommandId("card:task-card:1");
+            row.setCardAttemptCount(0);
+            row.setCardMaxAttempts(2);
+            row.setCardNextAttemptAt(NOW);
+            mapper.insert(row);
+
+            // 无效卡片状态被 CHECK 拒绝。
+            var badCard = confirmation(enterprise, binding.getId(), "task-card-bad");
+            badCard.setCardStatus("bogus");
+            assertThrows(DataAccessException.class, () -> mapper.insert(badCard));
+
+            // 领取租约：旧持有者 token 失效，不能重复完成或失败。
+            assertEquals(1, mapper.claimCardSend(enterprise, row.getId(), "token-1", Timestamp.from(NOW.plusSeconds(60)), now()));
+            assertEquals(0, mapper.claimCardSend(enterprise, row.getId(), "token-2", Timestamp.from(NOW.plusSeconds(60)), now()));
+            assertEquals(0, mapper.completeCardSend(enterprise, row.getId(), "token-2", "om-1", now()));
+            assertEquals(1, mapper.unknownCardSend(enterprise, row.getId(), "token-1", "结果不明", now()));
+            var unknown = mapper.find(enterprise, binding.getId(), "task-card");
+            assertEquals("unknown", unknown.getCardStatus());
+            // 结果不明后不再被领取（unknown 不在可领取状态内）。
+            assertEquals(0, mapper.claimCardSend(enterprise, row.getId(), "token-3", Timestamp.from(NOW.plusSeconds(60)), now()));
+
+            // 明确失败退避重试并在超限后阻断。
+            var retry = confirmation(enterprise, binding.getId(), "task-retry");
+            retry.setCardStatus("failed");
+            retry.setCardCommandId("card:task-retry:1");
+            retry.setCardAttemptCount(0);
+            retry.setCardMaxAttempts(1);
+            retry.setCardNextAttemptAt(NOW);
+            mapper.insert(retry);
+            assertEquals(1, mapper.claimCardSend(enterprise, retry.getId(), "token-a", Timestamp.from(NOW.plusSeconds(60)), now()));
+            assertEquals(1, mapper.failCardSend(enterprise, retry.getId(), "token-a", Timestamp.from(NOW.plusSeconds(60)), "failed", "限流", now()));
+            // 尝试次数已达上限：不能再领取。
+            assertEquals(0, mapper.claimCardSend(enterprise, retry.getId(), "token-b", Timestamp.from(NOW.plusSeconds(120)), Timestamp.from(NOW.plusSeconds(60))));
         }
     }
 

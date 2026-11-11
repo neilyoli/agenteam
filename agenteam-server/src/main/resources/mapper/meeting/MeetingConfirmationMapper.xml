@@ -16,11 +16,57 @@
     WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
   </update>
 
+  <!-- 开始新一轮确认：重置版本、负责人、状态与整组卡片投递状态，稳定命令编号按版本生成。 -->
   <update id="beginRound">
     UPDATE meeting_confirmation SET task_version = #{taskVersion}, owner_user_id = #{ownerUserId},
       owner_subject = #{ownerSubject}, status = #{status}, confirm_comment = NULL,
-      card_message_id = NULL, last_event_id = NULL, revision = revision + 1, updated_at = #{now}
+      card_message_id = NULL, last_event_id = NULL,
+      card_status = #{cardStatus}, card_title = #{cardTitle}, card_description = #{cardDescription},
+      card_command_id = #{cardCommandId}, card_attempt_count = 0, card_next_attempt_at = #{now},
+      card_claim_token = NULL, card_lease_until = NULL, card_last_error = NULL,
+      revision = revision + 1, updated_at = #{now}
     WHERE enterprise_id = #{enterpriseId} AND binding_id = #{bindingId} AND business_key = #{businessKey}
+  </update>
+
+  <!-- 对账扫描：任务投递箱确认 delivered 之后，才允许出现对应版本的确认轮次。 -->
+  <select id="deliveredTasksAwaitingConfirmation" resultType="com.stonewu.agenteam.model.meeting.entity.MeetingSyncOutboxRow">
+    SELECT o.* FROM meeting_sync_outbox o
+    JOIN meeting_binding b ON b.enterprise_id = o.enterprise_id AND b.id = o.binding_id AND b.business_type = 'task'
+    LEFT JOIN meeting_confirmation c ON c.enterprise_id = o.enterprise_id AND c.binding_id = o.binding_id
+      AND c.business_key = o.business_key
+    WHERE o.delivered_version &gt; 0 AND (c.id IS NULL OR c.task_version &lt; o.delivered_version)
+    ORDER BY o.updated_at ASC
+    LIMIT #{limit}
+  </select>
+
+  <!-- 原子领取卡片投递租约：待发送或退避到期且无有效租约。 -->
+  <update id="claimCardSend">
+    UPDATE meeting_confirmation SET card_claim_token = #{token}, card_lease_until = #{leaseUntil},
+      card_status = 'sending', card_attempt_count = card_attempt_count + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND status = 'pending'
+      AND card_status IN ('pending','failed') AND card_attempt_count &lt; card_max_attempts
+      AND card_next_attempt_at &lt;= #{now}
+      AND (card_claim_token IS NULL OR card_lease_until &lt;= #{now})
+  </update>
+
+  <update id="completeCardSend">
+    UPDATE meeting_confirmation SET card_status = 'sent', card_message_id = #{messageId},
+      card_claim_token = NULL, card_lease_until = NULL, card_last_error = NULL,
+      revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND card_claim_token = #{token}
+  </update>
+
+  <update id="failCardSend">
+    UPDATE meeting_confirmation SET card_status = #{status}, card_next_attempt_at = #{nextAttemptAt},
+      card_claim_token = NULL, card_lease_until = NULL, card_last_error = #{error},
+      updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND card_claim_token = #{token}
+  </update>
+
+  <update id="unknownCardSend">
+    UPDATE meeting_confirmation SET card_status = 'unknown', card_claim_token = NULL, card_lease_until = NULL,
+      card_last_error = #{error}, revision = revision + 1, updated_at = #{now}
+    WHERE enterprise_id = #{enterpriseId} AND id = #{id} AND card_claim_token = #{token}
   </update>
 
 </mapper>

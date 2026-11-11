@@ -36,12 +36,12 @@ class MeetingTaskIdentityServiceTest {
     void assignsNewStableIdentityWhenNoDuplicate() {
         when(identities.findActiveByTitleAndOwner("ent", "落地对接方案", "ou_a")).thenReturn(List.of());
 
-        String key = service.resolve("ent", "binding-1", request(null, "落地对接方案", "ou_a", "mtg-1"));
+        var identity = service.resolve("ent", "binding-1", request(null, "落地对接方案", "ou_a", "mtg-1"));
 
-        assertTrue(key.startsWith("T-"));
+        assertTrue(identity.getId().startsWith("T-"));
         ArgumentCaptor<MeetingTaskIdentityRow> captor = ArgumentCaptor.forClass(MeetingTaskIdentityRow.class);
         verify(identities).insert(captor.capture());
-        assertEquals(key, captor.getValue().getId());
+        assertEquals(identity.getId(), captor.getValue().getId());
         assertEquals("落地对接方案", captor.getValue().getTitleCurrent());
         assertEquals("落地对接方案", captor.getValue().getTitleNormalized());
         assertEquals(0, captor.getValue().getSourceCount());
@@ -66,9 +66,9 @@ class MeetingTaskIdentityServiceTest {
         when(identities.find("ent", "T-stable")).thenReturn(existing);
         when(sources.find("ent", "T-stable", "mtg-2")).thenReturn(null);
 
-        String key = service.resolve("ent", "binding-1", request("T-stable", "落地对接方案（修订）", "ou_a", "mtg-2"));
+        var identity = service.resolve("ent", "binding-1", request("T-stable", "落地对接方案（修订）", "ou_a", "mtg-2"));
 
-        assertEquals("T-stable", key);
+        assertEquals("T-stable", identity.getId());
         // 身份键不变，展示快照更新。
         ArgumentCaptor<MeetingTaskIdentityRow> captor = ArgumentCaptor.forClass(MeetingTaskIdentityRow.class);
         verify(identities, atLeastOnce()).updateById(captor.capture());
@@ -87,9 +87,9 @@ class MeetingTaskIdentityServiceTest {
         source.setMeetingId("mtg-1");
         when(sources.find("ent", "T-stable", "mtg-1")).thenReturn(source);
 
-        String key = service.resolve("ent", "binding-1", request("T-stable", "落地对接方案", "ou_a", "mtg-1"));
+        var identity = service.resolve("ent", "binding-1", request("T-stable", "落地对接方案", "ou_a", "mtg-1"));
 
-        assertEquals("T-stable", key);
+        assertEquals("T-stable", identity.getId());
         verify(sources, never()).insert(any(MeetingTaskSourceRow.class));
         verify(sources).updateById(source);
         // 同一会议重复提及不增加来源计数。
@@ -126,7 +126,7 @@ class MeetingTaskIdentityServiceTest {
     private MeetingTaskIdentityService.IdentityRequest request(String existingKey, String title, String ownerOpenId,
                                                                String meetingId) {
         return new MeetingTaskIdentityService.IdentityRequest(existingKey, title, ownerOpenId, "user-a", "张三",
-            meetingId, "季度会", List.of(Map.of("sourceType", "minutes", "anchor", "p1")), "run-1", "cmd-1");
+            meetingId, "季度会", List.of(Map.of("sourceType", "minutes", "anchor", "p1")), "run-1", "cmd-1", true);
     }
 
     private MeetingTaskIdentityRow identity(String key, String title, String ownerOpenId) {

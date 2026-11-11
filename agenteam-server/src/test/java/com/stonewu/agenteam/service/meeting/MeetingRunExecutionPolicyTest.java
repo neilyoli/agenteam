@@ -3,6 +3,7 @@ package com.stonewu.agenteam.service.meeting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stonewu.agenteam.mapper.meeting.MeetingBindingMapper;
+import com.stonewu.agenteam.mapper.meeting.MeetingConfirmationMapper;
 import com.stonewu.agenteam.mapper.meeting.MeetingEventMapper;
 import com.stonewu.agenteam.mapper.meeting.MeetingSubscriptionMapper;
 import com.stonewu.agenteam.model.auth.entity.AuthContext;
@@ -33,8 +34,9 @@ class MeetingRunExecutionPolicyTest {
     private final MeetingBindingMapper bindings = mock(MeetingBindingMapper.class);
     private final MeetingEventPolicy eventPolicy = mock(MeetingEventPolicy.class);
     private final MeetingEventAccessService access = mock(MeetingEventAccessService.class);
+    private final MeetingConfirmationMapper confirmations = mock(MeetingConfirmationMapper.class);
     private final MeetingRunExecutionPolicy policy =
-        new MeetingRunExecutionPolicy(events, subscriptions, bindings, eventPolicy, access);
+        new MeetingRunExecutionPolicy(events, subscriptions, bindings, eventPolicy, access, confirmations);
 
     @Test
     void allowsPublishForValidMeetingEventRun() {

@@ -169,6 +169,34 @@
 
 ## M7 记录
 
+- M7-C（完成）：负责人确认完整闭环——任务同步成功后自动、独立、可恢复地投递确认卡片。
+  - 迁移 `V0.6.0.6`：`meeting_confirmation` 新增卡片投递列（card_status pending/sending/sent/failed/
+    blocked/unknown/unresolved、标题/描述快照、尝试计数与上限、next_attempt_at、claim_token+lease_until
+    租约栅栏、card_last_error 与索引）。
+  - `MeetingConfirmationDeliveryService`（卡片对账 + 投递状态机）：
+    - 对账扫描（`deliveredTasksAwaitingConfirmation` JOIN 投递箱×绑定×确认）：只有任务 Outbox
+      delivered_version > 确认轮次版本时才创建/推进确认轮次——任务未写入成功绝不发卡；卡片失败
+      不回滚任务同步；重启后凭扫描自动恢复，不依赖内存状态。
+    - 负责人在建轮时经 `ChatIdentityService` 按 `feishu_open_id` 重新可信解析；未绑定或歧义 →
+      status=unresolved + card_status=unresolved，绝不发卡。
+    - 命令编号 `card:{bindingId}:{taskKey}:{version}` 稳定生成，重试复用同一 uuid，不重复创建
+      有效确认轮次；同版本重投递不重建轮次（版本栅栏）。
+  - `MeetingConfirmationCardWorker` + `MeetingConfirmationScheduling`（单有界线程，5 秒轮询，
+    `agenteam.meeting.confirmation-worker-enabled` 开关）。
+  - `MeetingCardDeliveryException`（继承 ChannelProviderException，兼容督办链路）：网络未取得明确
+    结果 → UNKNOWN（card_status=unknown，**停止自动重发**——uuid 幂等窗口不可靠，转人工核查）；
+    飞书明确拒绝 → REJECTED（限流 429/99991400 退避重试，其余 blocked 待修复；超上限阻断）。
+  - 需调整修订闭环：`MeetingConfirmationCallbackService` 在回答提交后触发
+    `MeetingConfirmationService.triggerRevision`（独立事务，失败仅记录不影响确认回答）→
+    `RunSubmissionService.meetingRevision`（mode=meeting_revision，固定 meetingRevisionTaskKey + 订阅快照）
+    → 修订 Run 经 `MeetingRunExecutionPolicy` 修订分支授权（确认轮次必须仍处 needs_revision）重新发布
+    （existingTaskKey 强制、meeting_id 用任务身份固定的来源会议、不重复记来源）→ 新版本投递成功后
+    对账扫描 beginRound 重置轮次 → 新版本卡片重新确认。
+  - 验证：`MeetingConfirmationDeliveryServiceTest`(6：delivered 后建轮/未绑定不发卡/版本推进/身份缺失
+    跳过/稳定命令编号发送成功/三类失败分类)、`MeetingConfirmationSchemaTest` 增至 4 项（卡片状态机
+    租约栅栏：旧 token 不可完成、unknown 不再领取、超限阻断）；全量 Meeting*Test → **101 项全通过**。
+  - 回写恢复语义：确认回答与 task_status 回写命令同事务（M5 既有），回写失败由版本化投递箱退避重试，
+    看板以飞书为准，不提前展示未回写状态；`publish()` 同步发卡死代码已删除。
 - M7-B（完成）：稳定任务身份与跨会议关联，替换 M3 标题+负责人哈希算法。
   - 迁移 `V0.6.0.5`：`meeting_task_identity`（宿主分配的稳定身份：task_key 随机分配、标题/负责人仅作
     展示快照、title_normalized 供候选匹配、status active/merged/review、来源计数）与 `meeting_task_source`
