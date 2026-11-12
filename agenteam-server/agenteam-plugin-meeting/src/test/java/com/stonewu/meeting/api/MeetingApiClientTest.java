@@ -21,6 +21,14 @@ class MeetingApiClientTest {
     }
 
     @Test
+    void buildsDocumentedMeetingSearchAndDetailPaths() {
+        assertEquals("/open-apis/vc/v1/meetings/list_by_no?meeting_no=123456789",
+            MeetingApiClient.meetingSearchPath("meeting_no=123456789"));
+        assertEquals("/open-apis/vc/v1/meetings/meeting%2Fid?with_participants=true&with_meeting_ability=false&user_id_type=open_id",
+            MeetingApiClient.meetingDetailPath("meeting/id"));
+    }
+
+    @Test
     void returnsEmptyForNull() {
         assertEquals("", MeetingApiClient.encode(null));
     }

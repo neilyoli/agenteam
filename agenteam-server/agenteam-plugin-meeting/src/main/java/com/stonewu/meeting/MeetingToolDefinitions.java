@@ -29,17 +29,19 @@ final class MeetingToolDefinitions {
     }
 
     private static ToolSpec meetingSearch() {
-        return tool("meeting_search", "搜索会议", "按时间范围或会议编号查询授权范围内的飞书会议列表。"
-            + "返回会议编号、主题、主持人、起止时间与状态；结果按页返回，pageToken 为空表示第一页。",
-            Map.of("startTime", Map.of("type", "string",
-                "description", "开始时间下界，ISO-8601 格式（如 2026-11-01T00:00:00+08:00），可省略。"),
+        return tool("meeting_search", "按会议号搜索会议实例",
+            "按飞书 9 位会议号查询会议实例列表。必须提供 meetingNo；可选 startTime/endTime（带时区 ISO-8601，范围不超过 90 天），返回 meetingId、会议号及分页游标。"
+                + "此接口不能仅按日期列出企业全部会议。若用户没有会议号，应先让用户提供会议号或使用已授权的日历事件数据源，不要反复尝试日期范围搜索。",
+            Map.of("meetingNo", Map.of("type", "string", "pattern", "^[0-9]{9}$",
+                    "description", "必填：飞书 9 位会议号。不是 meetingId。"),
+                "startTime", Map.of("type", "string",
+                    "description", "可选：带时区 ISO-8601 开始时间，例如 2026-11-01T00:00:00+08:00；默认最近 90 天。"),
                 "endTime", Map.of("type", "string",
-                    "description", "开始时间上界，ISO-8601 格式，可省略。"),
-                "meetingNo", Map.of("type", "string", "description", "会议编号，可省略。"),
+                    "description", "可选：带时区 ISO-8601 结束时间；默认当前时间。"),
                 "pageToken", Map.of("type", "string", "description", "翻页游标，空表示第一页。"),
                 "pageSize", Map.of("type", "integer", "minimum", 1, "maximum", 100, "default", 20,
                     "description", "每页条数，最多 100。")),
-            List.of());
+            List.of("meetingNo"));
     }
 
     private static ToolSpec meetingGet() {

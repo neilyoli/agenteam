@@ -80,12 +80,14 @@ public final class MeetingPlugin implements JavaToolPlugin {
 
     private Map<String, Object> search(Map<String, Object> args, Map<String, Object> config, JavaPluginContext ctx) {
         var read = readService(config);
-        List<Meeting> meetings = read.search(string(args, "startTime"), string(args, "endTime"),
+        var page = read.search(string(args, "startTime"), string(args, "endTime"),
             string(args, "meetingNo"), string(args, "pageToken"), integer(args, "pageSize", 20, 1, 100), ctx);
         var result = new LinkedHashMap<String, Object>();
-        result.put("content", "共找到 " + meetings.size() + " 场会议。");
+        result.put("content", "本页返回 " + page.meetings().size() + " 场会议。");
         result.put("isError", false);
-        result.put("meetings", meetings.stream().map(MeetingPlugin::meetingMap).toList());
+        result.put("meetings", page.meetings().stream().map(MeetingPlugin::meetingMap).toList());
+        result.put("hasMore", page.hasMore());
+        result.put("pageToken", page.pageToken());
         return result;
     }
 
@@ -93,7 +95,7 @@ public final class MeetingPlugin implements JavaToolPlugin {
         var read = readService(config);
         String id = requiredString(args, "meetingId");
         Meeting meeting = read.get(id, ctx);
-        List<MeetingParticipant> participants = read.participants(id, null, 100, ctx);
+        List<MeetingParticipant> participants = meeting.participants() == null ? List.of() : meeting.participants();
         var result = new LinkedHashMap<String, Object>();
         result.put("content", "已读取会议及其参会人。");
         result.put("isError", false);

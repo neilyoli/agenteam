@@ -129,7 +129,7 @@ class MeetingPluginTest {
 
     @Test
     void returnsAuthExpiredWhenNoCredential() {
-        var result = invoke("meeting_search", Map.of(), MeetingTestContext.withoutCredential());
+        var result = invoke("meeting_search", Map.of("meetingNo", "123456789"), MeetingTestContext.withoutCredential());
         assertTrue(result.path("isError").asBoolean());
         assertEquals("AUTH_EXPIRED", result.path("code").asText());
     }

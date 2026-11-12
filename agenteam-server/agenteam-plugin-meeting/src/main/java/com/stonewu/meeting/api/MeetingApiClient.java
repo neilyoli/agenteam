@@ -15,11 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
-/**
- * 飞书 Open API 客户端。使用 JDK {@link HttpClient} 与宿主下发的短期凭据头，不引入额外依赖。
- * 只读会议资料；目标资源（app_token / table_id）不在此类中出现，由宿主受控命令另行处理。
- * 端点与字段以飞书官方契约为准，真实租户 POC 前按已知契约实现并保留脱敏。
- */
+/** 飞书 Open API 客户端。凭据只使用宿主本次调用注入的短期请求头。 */
 public final class MeetingApiClient {
     private static final String AUTH_HEADER = "Authorization";
     private static final String DEFAULT_BASE_URL = "https://open.feishu.cn";
@@ -47,20 +43,23 @@ public final class MeetingApiClient {
         return value == null || value.isBlank() ? DEFAULT_BASE_URL : value.strip();
     }
 
-    /** 查询会议列表。query 为已编码的查询串（不含问号），返回 data.items 数组。 */
+    /** 按会议号获取会议实例列表。 */
     public JsonNode searchMeetings(String query, JavaPluginContext context) {
-        return getJson("/open-apis/vc/v1/meetings?" + query, context);
+        return getJson(meetingSearchPath(query), context);
     }
 
-    /** 读取单个会议，返回 data.meeting。 */
+    /** 获取会议详情，并由飞书在同一响应中返回参会人列表。 */
     public JsonNode getMeeting(String meetingId, JavaPluginContext context) {
-        return getJson("/open-apis/vc/v1/meetings/" + encode(meetingId), context);
+        return getJson(meetingDetailPath(meetingId), context);
     }
 
-    /** 读取参会人列表，返回 data.participants 数组。 */
-    public JsonNode getParticipants(String meetingId, String query, JavaPluginContext context) {
-        String suffix = query == null || query.isBlank() ? "" : "?" + query;
-        return getJson("/open-apis/vc/v1/meetings/" + encode(meetingId) + "/participant_list" + suffix, context);
+    static String meetingSearchPath(String query) {
+        return "/open-apis/vc/v1/meetings/list_by_no?" + query;
+    }
+
+    static String meetingDetailPath(String meetingId) {
+        return "/open-apis/vc/v1/meetings/" + encode(meetingId)
+            + "?with_participants=true&with_meeting_ability=false&user_id_type=open_id";
     }
 
     /** 读取妙记元数据，返回 data（含 minute_token / 就绪信息）。 */
@@ -92,14 +91,14 @@ public final class MeetingApiClient {
         try {
             context.beforeSend();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            return decode(response, pathAndQuery);
-        } catch (HttpTimeoutException e) {
-            throw new MeetingApiException(MeetingApiException.Kind.TIMEOUT, "飞书接口超时", e);
-        } catch (IOException e) {
-            throw new MeetingApiException(MeetingApiException.Kind.RETRYABLE, "飞书接口网络异常", e);
-        } catch (InterruptedException e) {
+            return decode(response);
+        } catch (HttpTimeoutException failure) {
+            throw new MeetingApiException(MeetingApiException.Kind.TIMEOUT, "飞书接口超时", failure);
+        } catch (IOException failure) {
+            throw new MeetingApiException(MeetingApiException.Kind.RETRYABLE, "飞书接口网络异常", failure);
+        } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            throw new MeetingApiException(MeetingApiException.Kind.UNKNOWN, "调用被中断", e);
+            throw new MeetingApiException(MeetingApiException.Kind.UNKNOWN, "调用被中断", failure);
         }
     }
 
@@ -107,12 +106,12 @@ public final class MeetingApiClient {
         Map<String, String> headers = context.credentialHeaders();
         String value = headers == null ? null : headers.get(AUTH_HEADER);
         if (value == null || value.isBlank()) {
-            throw new MeetingApiException(MeetingApiException.Kind.AUTH_EXPIRED, "缺少飞书访问凭据，请先完成授权");
+            throw new MeetingApiException(MeetingApiException.Kind.AUTH_EXPIRED, "缺少飞书访问凭据，请检查企业飞书接入绑定");
         }
         return value;
     }
 
-    private JsonNode decode(HttpResponse<String> response, String pathAndQuery) throws IOException {
+    private JsonNode decode(HttpResponse<String> response) throws IOException {
         JsonNode root = json.readTree(response.body());
         if (root == null || root.isMissingNode()) {
             throw new MeetingApiException(MeetingApiException.Kind.UNKNOWN, "飞书返回空响应");
@@ -124,29 +123,29 @@ public final class MeetingApiClient {
         throw classify(code, root.path("msg").asText(""), response.statusCode());
     }
 
-    private MeetingApiException classify(int code, String msg, int httpStatus) {
+    private MeetingApiException classify(int code, String message, int httpStatus) {
         if (httpStatus == 429 || code == 99991400) {
-            return new MeetingApiException(MeetingApiException.Kind.RATE_LIMITED, msg);
+            return new MeetingApiException(MeetingApiException.Kind.RATE_LIMITED, message);
         }
         if (httpStatus == 401 || code == 99991661 || code == 99991663) {
-            return new MeetingApiException(MeetingApiException.Kind.AUTH_EXPIRED, msg);
+            return new MeetingApiException(MeetingApiException.Kind.AUTH_EXPIRED, message);
         }
-        if (httpStatus == 403 || code == 99991401 || code == 99991668) {
-            return new MeetingApiException(MeetingApiException.Kind.PERMISSION_DENIED, msg);
+        if (httpStatus == 403 || code == 99991401 || code == 99991668 || code == 121005) {
+            return new MeetingApiException(MeetingApiException.Kind.PERMISSION_DENIED, message);
         }
-        if (httpStatus == 404) {
-            return new MeetingApiException(MeetingApiException.Kind.NOT_FOUND, msg);
+        if (httpStatus == 404 || code == 121004) {
+            return new MeetingApiException(MeetingApiException.Kind.NOT_FOUND, message);
         }
-        if (code == 99991402 || code == 99991403 || code == 10030) {
-            return new MeetingApiException(MeetingApiException.Kind.INVALID_ARGUMENT, msg);
+        if (code == 99991402 || code == 99991403 || code == 10030 || code == 121003) {
+            return new MeetingApiException(MeetingApiException.Kind.INVALID_ARGUMENT, message);
         }
-        if (httpStatus >= 500 || code == 99991667) {
-            return new MeetingApiException(MeetingApiException.Kind.RETRYABLE, msg);
+        if (httpStatus >= 500 || code == 99991667 || code == 121001) {
+            return new MeetingApiException(MeetingApiException.Kind.RETRYABLE, message);
         }
-        return new MeetingApiException(MeetingApiException.Kind.UNKNOWN, msg);
+        return new MeetingApiException(MeetingApiException.Kind.UNKNOWN, message);
     }
 
-    /** 路径段编码：会议编号/妙记编号为不透明令牌，仍需对空格、斜杠等特殊字符做百分号编码，避免破坏请求。 */
+    /** 对路径段和查询参数进行 UTF-8 百分号编码。 */
     static String encode(String value) {
         if (value == null) {
             return "";
