@@ -95,7 +95,7 @@ public final class MeetingPlugin implements JavaToolPlugin {
         var read = readService(config);
         String id = requiredString(args, "meetingId");
         Meeting meeting = read.get(id, ctx);
-        List<MeetingParticipant> participants = read.participants(id, null, 100, ctx);
+        List<MeetingParticipant> participants = meeting.participants() == null ? List.of() : meeting.participants();
         var result = new LinkedHashMap<String, Object>();
         result.put("content", "已读取会议及其参会人。");
         result.put("isError", false);
