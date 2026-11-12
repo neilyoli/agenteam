@@ -19,7 +19,7 @@ public class MeetingSkills {
             "一场会议结束后，需要把会议中形成的行动项、承诺与跨部门交付事项沉淀为可督办的任务，并给出负责人、证据、分类与建议截止日期。",
             "meetingId（必填）：飞书会议编号；可选上下文：已通过 meeting_search / meeting_get 获得的会议与参会人信息。",
             """
-                1. 用 meeting_get 读取会议详情与参会人；用 meeting_artifact_status 确认纪要、妙记或逐字稿是否就绪。资料未就绪时停止并报告等待条件，不反复轮询。
+                1. 只有用户提供 9 位飞书会议号时才调用 meeting_search；该接口不是企业全量会议列表，不能只传日期。没有会议号时，询问用户提供会议号，或说明需要另接日历事件来源。用 meeting_get 读取会议详情与参会人；用 meeting_artifact_status 确认纪要、妙记或逐字稿是否就绪。资料未就绪时停止并报告等待条件，不反复轮询。
                 2. 用 minutes_get / transcript_get 分段读取资料；hasMore 为 true 时用返回的 pageToken 继续读取，直到覆盖全部内容或达到单次预算上限。
                 3. 从资料中逐条识别候选任务，只提炼会议中确有依据的行动项，不凭空补造。
                 4. 对每条候选任务执行：分类（L1/L2 进入督办，L3 仅记录）、证据（引用可定位来源）、负责人（用 meeting_people_resolve 映射到 openId，歧义交人工）、去重（同会议同标题同负责人合并）、上下游覆盖（标注 upstreamTaskRefs）、发布策略（L1/L2 才进入督办）。
